@@ -5,14 +5,11 @@ const { EventEmitter } = require('node:events');
 const { canGoBack, canGoForward, goBack, goForward } = require('./nav-history');
 const { COLORS } = require('../shared/config');
 
-const PAGES_DIR = path.join(__dirname, '..', 'renderer', 'pages');
-const START_PAGE = path.join(PAGES_DIR, 'start.html');
-const ERROR_PAGE = path.join(PAGES_DIR, 'error.html');
-const isInternalUrl = (u) => typeof u === 'string' && u.includes('/renderer/pages/');
+const isInternalUrl = (u) => typeof u === 'string' && u.startsWith('pane://');
 
 /**
  * One web-page surface — a native WebContentsView plus its navigation behavior.
- * Self-contained controller: one instance today, many later (tabs → canvas).
+ * Internal surfaces (new-tab, error, …) are served over the pane:// protocol.
  * Emits: 'loading'(bool), 'nav-state'(...), 'load-error'(...), 'title'(string),
  *        'favicon'(url), 'navigated'(url), 'found'(result), 'open-external'(url).
  */
@@ -20,7 +17,11 @@ class PageView extends EventEmitter {
   constructor() {
     super();
     this.view = new WebContentsView({
-      webPreferences: { contextIsolation: true, nodeIntegration: false },
+      webPreferences: {
+        preload: path.join(__dirname, '..', 'preload', 'page.js'), // scoped to pane:// pages
+        contextIsolation: true,
+        nodeIntegration: false,
+      },
     });
     this.view.setBackgroundColor(COLORS.canvas); // seam-hider (DESIGN §2)
     this._displayUrl = null;    // address-bar override for internal pages
@@ -86,7 +87,7 @@ class PageView extends EventEmitter {
   loadStart() {
     this._displayUrl = '';
     this._internalLoad = true;
-    this.webContents.loadFile(START_PAGE);
+    this.webContents.loadURL('pane://newtab/');
   }
 
   /** The custom error surface (DESIGN §14). Keeps the attempted URL in the address bar. */
@@ -95,9 +96,8 @@ class PageView extends EventEmitter {
     this._internalLoad = true;
     this.emit('loading', false);
     this.emit('load-error', { code, desc, url });
-    this.webContents.loadFile(ERROR_PAGE, {
-      query: { url: url || '', code: String(code ?? ''), desc: desc || '' },
-    });
+    const q = new URLSearchParams({ url: url || '', code: String(code ?? ''), desc: desc || '' });
+    this.webContents.loadURL('pane://error/?' + q.toString());
   }
 
   back() { if (this.canGoBack()) goBack(this.webContents); }

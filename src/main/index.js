@@ -3,8 +3,12 @@
 const { app, BaseWindow } = require('electron');
 const PaneWindow = require('./pane-window');
 const { registerIpc } = require('./ipc');
+const { registerScheme, handle } = require('./protocol');
+const { registerInternalIpc } = require('./internal-ipc');
 const settings = require('./settings');
 const session = require('./session');
+
+registerScheme(); // must run before app 'ready'
 
 /** @type {PaneWindow | null} */
 let current = null;
@@ -15,8 +19,9 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // IPC handlers resolve the active window lazily (→ its TabManager → active tab).
-  registerIpc(() => current);
+  handle();                              // serve pane://
+  registerIpc(() => current);            // window.pane (toolbar)
+  registerInternalIpc(() => current);    // window.paneInternal (internal pages)
   createWindow();
   app.on('activate', () => {
     if (BaseWindow.getAllWindows().length === 0) createWindow();
