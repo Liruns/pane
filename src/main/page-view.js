@@ -13,11 +13,8 @@ const isInternalUrl = (u) => typeof u === 'string' && u.includes('/renderer/page
 /**
  * One web-page surface — a native WebContentsView plus its navigation behavior.
  * Self-contained controller: one instance today, many later (tabs → canvas).
- * Internal pages (start / error) are local file:// docs; the toolbar address bar
- * shows a clean override (empty for start, the attempted URL for error) instead
- * of their file path.
- * Emits: 'loading'(bool), 'nav-state'({url,canGoBack,canGoForward}),
- *        'load-error'({code,desc,url}), 'title'(string), 'open-external'(url).
+ * Emits: 'loading'(bool), 'nav-state'(...), 'load-error'(...), 'title'(string),
+ *        'favicon'(url), 'open-external'(url).
  */
 class PageView extends EventEmitter {
   constructor() {
@@ -26,8 +23,8 @@ class PageView extends EventEmitter {
       webPreferences: { contextIsolation: true, nodeIntegration: false },
     });
     this.view.setBackgroundColor(COLORS.canvas); // seam-hider (DESIGN §2)
-    this._displayUrl = null;     // override for the address bar on internal pages
-    this._internalLoad = false;  // suppress the loading bar for instant local pages
+    this._displayUrl = null;    // address-bar override for internal pages
+    this._internalLoad = false; // suppress the loading bar for instant local pages
     this._wireEvents();
   }
 
@@ -39,25 +36,24 @@ class PageView extends EventEmitter {
     wc.on('did-start-loading', () => { if (!this._internalLoad) this.emit('loading', true); });
     wc.on('did-stop-loading', () => { this._internalLoad = false; this.emit('loading', false); this._emitState(); });
 
-    // DESIGN §4/§15: main-frame navigations only (ignore SPA in-page + subframes).
     wc.on('did-start-navigation', (_e, url, isInPlace, isMainFrame) => {
       if (!isMainFrame || isInPlace) return;
-      if (isInternalUrl(url)) { this._internalLoad = true; return; } // keep override, no bar
-      this._displayUrl = null; // a real navigation → show the real URL
+      if (isInternalUrl(url)) { this._internalLoad = true; return; }
+      this._displayUrl = null;     // a real navigation → show the real URL
+      this.emit('favicon', '');    // clear the stale favicon until the new page reports one
       this.emit('loading', true);
     });
 
     wc.on('did-navigate', () => this._emitState());
     wc.on('did-navigate-in-page', () => this._emitState());
 
-    // DESIGN §14: a failed main-frame nav paints the custom error page (and never hangs).
     wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
       if (isMainFrame && code !== -3 && !isInternalUrl(url)) this.loadError(url, code, desc);
     });
 
     wc.on('page-title-updated', (_e, title) => this.emit('title', title));
+    wc.on('page-favicon-updated', (_e, favs) => this.emit('favicon', (favs && favs[0]) || ''));
 
-    // Dev-tool hand-off (brief): window.open / target=_blank → system browser.
     wc.setWindowOpenHandler(({ url }) => {
       this.emit('open-external', url);
       return { action: 'deny' };

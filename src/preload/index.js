@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('pane', {
   newTab: () => ipcRenderer.invoke(CH.TAB_NEW),
   closeTab: (id) => ipcRenderer.invoke(CH.TAB_CLOSE, id),
   activateTab: (id) => ipcRenderer.invoke(CH.TAB_ACTIVATE, id),
+  toggleMaximize: () => ipcRenderer.invoke(CH.TOGGLE_MAXIMIZE),
 
   // events ← main
   onNavState: (cb) => ipcRenderer.on(CH.NAV_STATE, (_e, d) => cb(d)),

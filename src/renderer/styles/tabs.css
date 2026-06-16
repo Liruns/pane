@@ -39,6 +39,12 @@
 .tab:hover { background: rgba(255, 255, 255, 0.05); }
 .tab.active { background: var(--surface-1); color: var(--fg); }
 
+.tab .favicon { flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--fg-faint); }
+.tab .favicon img { width: 16px; height: 16px; }
+.tab .favicon svg { width: 14px; height: 14px; }
+@keyframes tab-pulse { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+.tab.loading .favicon { animation: tab-pulse 1s ease-in-out infinite; }
+
 .tab .title {
   flex: 1;
   min-width: 0;

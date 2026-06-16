@@ -5,20 +5,16 @@ const { handlePageKey } = require('./shortcuts');
 
 /**
  * Owns the set of tabs (one PageView each) and which is active. Only the active
- * tab's view is shown by the window; background tabs keep running. This is the
- * multi-instance layer the modular scaffold was built for.
+ * tab's view is shown by the window; background tabs keep running.
  *
- * Emits: 'active-page'(PageView)  — window swaps the visible view
- *        'tabs'(state)            — strip should re-render
- *        'all-closed'             — last tab closed → window closes
- *        'focus-address'          — Ctrl+L from a page
- *        re-emits the ACTIVE tab's 'loading' / 'nav-state' / 'load-error',
- *        and any tab's 'open-external'.
+ * Emits: 'active-page'(PageView), 'tabs'(state), 'all-closed', 'focus-address',
+ *        re-emits the ACTIVE tab's 'loading'/'nav-state'/'load-error', and any
+ *        tab's 'open-external'.
  */
 class TabManager extends EventEmitter {
   constructor() {
     super();
-    this.tabs = [];        // [{ id, view: PageView, title, url, loading }]
+    this.tabs = [];
     this.activeId = null;
     this._seq = 0;
   }
@@ -31,7 +27,9 @@ class TabManager extends EventEmitter {
   _state() {
     return {
       activeId: this.activeId,
-      tabs: this.tabs.map((t) => ({ id: t.id, title: t.title, url: t.url, loading: t.loading })),
+      tabs: this.tabs.map((t) => ({
+        id: t.id, title: t.title, url: t.url, loading: t.loading, favicon: t.favicon,
+      })),
     };
   }
   _emitTabs() { this.emit('tabs', this._state()); }
@@ -39,10 +37,11 @@ class TabManager extends EventEmitter {
   newTab(url) {
     const id = ++this._seq;
     const view = new PageView();
-    const tab = { id, view, title: 'New Tab', url: '', loading: false };
+    const tab = { id, view, title: 'New Tab', url: '', loading: false, favicon: '' };
     this.tabs.push(tab);
 
     view.on('title', (title) => { tab.title = title || 'New Tab'; this._emitTabs(); });
+    view.on('favicon', (f) => { tab.favicon = f; this._emitTabs(); });
     view.on('loading', (loading) => {
       tab.loading = loading;
       this._emitTabs();
@@ -68,7 +67,7 @@ class TabManager extends EventEmitter {
     const view = this.active;
     this.emit('active-page', view);
     this._emitTabs();
-    if (view) view.refreshState(); // push the active tab's nav state to the toolbar
+    if (view) view.refreshState();
   }
 
   /** Re-emit the current state — used after the toolbar renderer (re)loads. */
@@ -76,6 +75,15 @@ class TabManager extends EventEmitter {
     this._emitTabs();
     const view = this.active;
     if (view) view.refreshState();
+  }
+
+  nextTab() { this._cycle(1); }
+  prevTab() { this._cycle(-1); }
+  _cycle(dir) {
+    if (this.tabs.length < 2) return;
+    const i = this.tabs.findIndex((t) => t.id === this.activeId);
+    const next = this.tabs[(i + dir + this.tabs.length) % this.tabs.length];
+    this.activate(next.id);
   }
 
   closeActive() { if (this.activeId != null) this.closeTab(this.activeId); }
@@ -94,7 +102,7 @@ class TabManager extends EventEmitter {
     }
     if (wasActive) {
       const next = this.tabs[Math.min(idx, this.tabs.length - 1)];
-      this.activate(next.id); // window swaps the displayed view off the closing one first
+      this.activate(next.id);
     } else {
       this._emitTabs();
     }

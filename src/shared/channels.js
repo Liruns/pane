@@ -12,6 +12,7 @@ module.exports = {
   TAB_NEW: 'pane:tab-new',
   TAB_CLOSE: 'pane:tab-close',
   TAB_ACTIVATE: 'pane:tab-activate',
+  TOGGLE_MAXIMIZE: 'pane:toggle-maximize',
   // main → renderer (send)
   NAV_STATE: 'pane:nav-state',
   LOADING: 'pane:loading',

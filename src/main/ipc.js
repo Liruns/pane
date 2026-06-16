@@ -22,6 +22,10 @@ function registerIpc(getWindow) {
   ipcMain.handle(CH.TAB_NEW, () => { const t = tabsOf(); if (t) t.newTab(); });
   ipcMain.handle(CH.TAB_CLOSE, (_e, id) => { const t = tabsOf(); if (t) t.closeTab(id); });
   ipcMain.handle(CH.TAB_ACTIVATE, (_e, id) => { const t = tabsOf(); if (t) t.activate(id); });
+  ipcMain.handle(CH.TOGGLE_MAXIMIZE, () => {
+    const w = getWindow();
+    if (w) { w.win.isMaximized() ? w.win.unmaximize() : w.win.maximize(); }
+  });
 }
 
 module.exports = { registerIpc };
