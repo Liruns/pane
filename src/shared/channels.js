@@ -15,6 +15,9 @@ module.exports = {
   TOGGLE_MAXIMIZE: 'pane:toggle-maximize',
   SET_CHROME_HEIGHT: 'pane:set-chrome-height',
   HISTORY_QUERY: 'pane:history-query',
+  GET_SETTINGS: 'pane:get-settings',
+  SET_SETTING: 'pane:set-setting',
+  CLEAR_HISTORY: 'pane:clear-history',
   // main → renderer (send)
   NAV_STATE: 'pane:nav-state',
   LOADING: 'pane:loading',

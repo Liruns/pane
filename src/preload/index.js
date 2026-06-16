@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('pane', {
   toggleMaximize: () => ipcRenderer.invoke(CH.TOGGLE_MAXIMIZE),
   setChromeHeight: (h) => ipcRenderer.invoke(CH.SET_CHROME_HEIGHT, h),
   queryHistory: (input) => ipcRenderer.invoke(CH.HISTORY_QUERY, input),
+  getSettings: () => ipcRenderer.invoke(CH.GET_SETTINGS),
+  setSetting: (key, value) => ipcRenderer.invoke(CH.SET_SETTING, key, value),
+  clearHistory: () => ipcRenderer.invoke(CH.CLEAR_HISTORY),
 
   // events ← main
   onNavState: (cb) => ipcRenderer.on(CH.NAV_STATE, (_e, d) => cb(d)),

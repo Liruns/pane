@@ -5,9 +5,11 @@ import { initNavigation } from './features/navigation.js';
 import { initAddressBar } from './features/address-bar.js';
 import { initLoadingBar } from './features/loading-bar.js';
 import { initWindowControls } from './features/window-controls.js';
+import { initMenu } from './features/menu.js';
 
 initTabs();
 initNavigation();
 initAddressBar();
 initLoadingBar();
 initWindowControls();
+initMenu();

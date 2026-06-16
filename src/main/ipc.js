@@ -2,6 +2,8 @@
 const { ipcMain } = require('electron');
 const CH = require('../shared/channels');
 const history = require('./history');
+const settings = require('./settings');
+const session = require('./session');
 
 /**
  * Register the toolbar→main handlers once. Page commands route to the active tab;
@@ -28,7 +30,15 @@ function registerIpc(getWindow) {
     if (w) { w.win.isMaximized() ? w.win.unmaximize() : w.win.maximize(); }
   });
   ipcMain.handle(CH.SET_CHROME_HEIGHT, (_e, h) => { const w = getWindow(); if (w) w.setChromeHeight(h); });
+
   ipcMain.handle(CH.HISTORY_QUERY, (_e, input) => history.query(input));
+  ipcMain.handle(CH.CLEAR_HISTORY, () => history.clear());
+
+  ipcMain.handle(CH.GET_SETTINGS, () => settings.getAll());
+  ipcMain.handle(CH.SET_SETTING, (_e, key, value) => {
+    settings.set(key, value);
+    if (key === 'restoreSession' && !value) session.clear(); // privacy: drop the saved session
+  });
 }
 
 module.exports = { registerIpc };
