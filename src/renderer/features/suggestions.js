@@ -43,9 +43,13 @@ function actions(s) {
   const url = toNavURL(s);
   if (!url) return [];
   if (url.startsWith(SEARCH_BASE)) {
-    const out = [{ icon: 'search', label: `Search for “${s}”`, url }];
-    if (!/\s/.test(s) && s.includes('.')) out.push({ icon: 'go', label: `Go to ${s}`, url: 'https://' + s });
-    return out;
+    const se = { icon: 'search', label: `Search for “${s}”`, url };
+    // Plausibly a host (no spaces, dotted, parseable)? Surface "Go to" as #1 — search stays the
+    // default action (nothing is pre-selected), but the host is one keystroke away. DESIGN §10.5/6.
+    if (!/\s/.test(s) && s.includes('.') && URL.canParse('https://' + s)) {
+      return [{ icon: 'go', label: `Go to ${s}`, url: 'https://' + s }, se];
+    }
+    return [se];
   }
   return [
     { icon: 'go', label: `Go to ${hostOf(url)}`, url },
