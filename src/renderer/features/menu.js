@@ -42,6 +42,7 @@ function render() {
   panel.replaceChildren();
   item('Bookmarks', '', 'pane://bookmarks/');
   item('History', 'Ctrl+H', 'pane://history/');
+  item('Downloads', 'Ctrl+J', 'pane://downloads/');
   sep();
   item('Settings', 'Ctrl+,', 'pane://settings/');
 }

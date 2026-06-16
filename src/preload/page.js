@@ -19,5 +19,14 @@ if (location.protocol === 'pane:') {
       list: (opts) => ipcRenderer.invoke('pane-internal:bookmarks-list', opts),
       remove: (url) => ipcRenderer.invoke('pane-internal:bookmarks-remove', url),
     },
+    downloads: {
+      list: () => ipcRenderer.invoke('pane-internal:downloads-list'),
+      open: (id) => ipcRenderer.invoke('pane-internal:downloads-open', id),
+      showInFolder: (id) => ipcRenderer.invoke('pane-internal:downloads-show', id),
+      cancel: (id) => ipcRenderer.invoke('pane-internal:downloads-cancel', id),
+      remove: (id) => ipcRenderer.invoke('pane-internal:downloads-remove', id),
+      clear: () => ipcRenderer.invoke('pane-internal:downloads-clear'),
+      onChanged: (cb) => ipcRenderer.on('pane-internal:downloads-changed', () => cb()),
+    },
   });
 }

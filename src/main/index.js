@@ -5,6 +5,7 @@ const PaneWindow = require('./pane-window');
 const { registerIpc } = require('./ipc');
 const { registerScheme, handle } = require('./protocol');
 const { registerInternalIpc } = require('./internal-ipc');
+const downloads = require('./downloads');
 const settings = require('./settings');
 const session = require('./session');
 
@@ -20,6 +21,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   handle();                              // serve pane://
+  downloads.init();                      // attach to session will-download
   registerIpc(() => current);            // window.pane (toolbar)
   registerInternalIpc(() => current);    // window.paneInternal (internal pages)
   createWindow();

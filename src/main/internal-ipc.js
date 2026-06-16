@@ -5,6 +5,7 @@ const { ipcMain } = require('electron');
 const history = require('./history');
 const settings = require('./settings');
 const bookmarks = require('./bookmarks');
+const downloads = require('./downloads');
 
 const fromInternal = (event) => {
   try { return new URL(event.senderFrame.url).protocol === 'pane:'; } catch { return false; }
@@ -28,6 +29,13 @@ function registerInternalIpc(getWindow) {
 
   ipcMain.handle('pane-internal:bookmarks-list', (e, opts) => (fromInternal(e) ? bookmarks.list(opts) : []));
   ipcMain.handle('pane-internal:bookmarks-remove', (e, url) => { if (fromInternal(e)) bookmarks.remove(url); });
+
+  ipcMain.handle('pane-internal:downloads-list', (e) => (fromInternal(e) ? downloads.list() : []));
+  ipcMain.handle('pane-internal:downloads-open', (e, id) => { if (fromInternal(e)) downloads.open(id); });
+  ipcMain.handle('pane-internal:downloads-show', (e, id) => { if (fromInternal(e)) downloads.showInFolder(id); });
+  ipcMain.handle('pane-internal:downloads-cancel', (e, id) => { if (fromInternal(e)) downloads.cancel(id); });
+  ipcMain.handle('pane-internal:downloads-remove', (e, id) => { if (fromInternal(e)) downloads.removeEntry(id); });
+  ipcMain.handle('pane-internal:downloads-clear', (e) => { if (fromInternal(e)) downloads.clearCompleted(); });
 }
 
 module.exports = { registerInternalIpc, fromInternal };
