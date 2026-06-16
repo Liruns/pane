@@ -1,0 +1,18 @@
+/* Reset + window-level defaults for the toolbar document. */
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: transparent; /* transparent so the window's Mica/canvas shows */
+  overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--fg);
+  -webkit-user-select: none;
+  user-select: none;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

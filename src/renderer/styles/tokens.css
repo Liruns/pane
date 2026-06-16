@@ -1,0 +1,38 @@
+/* Design tokens — single source for the chrome. Mirrors DESIGN.md §2/§3.
+   (Keep in sync with DESIGN.md; this is the implementation of that spec.) */
+:root {
+  /* accent (the only chroma) */
+  --accent: #0071e3;
+  --accent-dark: #2997ff;
+
+  /* surfaces */
+  --canvas: #0a0a0b;
+  --surface: #1d1d1f;
+  --surface-1: #272729;
+
+  /* text on dark */
+  --fg: #f5f5f7;
+  --fg-muted: rgba(245, 245, 247, 0.62);
+  --fg-faint: rgba(245, 245, 247, 0.38);
+
+  /* hairlines (border as light) */
+  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline-strong: rgba(255, 255, 255, 0.16);
+
+  /* semantic */
+  --danger: #ff453a;
+  --success: #30d158;
+
+  /* metrics */
+  --toolbar-h: 48px;
+  --wco-right: 140px; /* reserved for native window controls; set at runtime (window-controls.js) */
+
+  /* DESIGN §2: v0 ships the honest OPAQUE fallback so the toolbar looks right everywhere.
+     For true Mica-through-toolbar, set --toolbar-bg: transparent (and optionally layer
+     rgba(22,22,24,0.55) as a deepening tint), then confirm on a Win11 box. */
+  --toolbar-bg: var(--surface);
+
+  /* type */
+  --font-ui: "Inter", "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, "SF Mono", monospace;
+}

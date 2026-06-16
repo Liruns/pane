@@ -1,0 +1,6 @@
+/* Pane toolbar styles — entry. Order matters: tokens → base → components. */
+@import "tokens.css";
+@import "base.css";
+@import "toolbar.css";
+@import "address-bar.css";
+@import "controls.css";

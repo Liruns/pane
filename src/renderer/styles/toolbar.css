@@ -1,0 +1,28 @@
+/* The toolbar shell + clusters. */
+#toolbar {
+  position: relative;
+  height: var(--toolbar-h);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--wco-right) 0 8px; /* keep the right cluster clear of the WCO region */
+  background: var(--toolbar-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05); /* faint glass highlight */
+  border-bottom: 1px solid var(--hairline);
+  -webkit-app-region: drag; /* frameless: the bar is the drag handle */
+}
+
+.cluster {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.address-wrap {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+  -webkit-app-region: no-drag;
+}
