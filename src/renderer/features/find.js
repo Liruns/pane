@@ -2,12 +2,7 @@
 // on the active tab and shows the active/total match count.
 import { $, on } from '../lib/dom.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
-
-const ICON = {
-  prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6"/></svg>',
-  next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
-  close: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-};
+import { ICONS } from '../lib/icons.js';
 
 let bar, input, countEl;
 
@@ -18,9 +13,9 @@ export function initFind() {
   bar.innerHTML =
     '<input id="find-input" type="text" placeholder="Find in page" spellcheck="false" autocomplete="off" />' +
     '<span class="find-count" id="find-count"></span>' +
-    `<button class="find-btn" id="find-prev" title="Previous (Shift+Enter)" aria-label="Previous">${ICON.prev}</button>` +
-    `<button class="find-btn" id="find-next" title="Next (Enter)" aria-label="Next">${ICON.next}</button>` +
-    `<button class="find-btn" id="find-close" title="Close (Esc)" aria-label="Close">${ICON.close}</button>`;
+    `<button class="find-btn" id="find-prev" title="Previous (Shift+Enter)" aria-label="Previous">${ICONS.chevronUp}</button>` +
+    `<button class="find-btn" id="find-next" title="Next (Enter)" aria-label="Next">${ICONS.chevronDown}</button>` +
+    `<button class="find-btn" id="find-close" title="Close (Esc)" aria-label="Close">${ICONS.close}</button>`;
   document.body.append(bar);
   input = $('#find-input');
   countEl = $('#find-count');
