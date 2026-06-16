@@ -1,4 +1,6 @@
 // The tab strip: renders the tab list from main, routes clicks back as tab actions.
+// (Keyboard shortcuts — Ctrl+T/W/Tab — are handled in the main process via
+// before-input-event so their preventDefault reliably stops focus traversal.)
 import { $, on } from '../lib/dom.js';
 
 const CLOSE_SVG =
@@ -6,28 +8,10 @@ const CLOSE_SVG =
 const GLOBE_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>';
 
-let state = { tabs: [], activeId: null };
-
 export function initTabs() {
   const list = $('#tabs');
   on($('#newtab'), 'click', () => window.pane.newTab());
-  window.pane.onTabs((next) => { state = next; render(list, next); });
-
-  // Ctrl+T / Ctrl+W / Ctrl+Tab when the chrome has focus (page-focus case handled in main).
-  on(window, 'keydown', (e) => {
-    if (!(e.ctrlKey || e.metaKey)) return;
-    const k = e.key.toLowerCase();
-    if (k === 't') { e.preventDefault(); window.pane.newTab(); }
-    else if (k === 'w') { e.preventDefault(); if (state.activeId != null) window.pane.closeTab(state.activeId); }
-    else if (e.key === 'Tab') {
-      e.preventDefault();
-      const ids = state.tabs.map((t) => t.id);
-      if (ids.length < 2) return;
-      const i = ids.indexOf(state.activeId);
-      const dir = e.shiftKey ? -1 : 1;
-      window.pane.activateTab(ids[(i + dir + ids.length) % ids.length]);
-    }
-  });
+  window.pane.onTabs((s) => render(list, s));
 }
 
 function faviconEl(tab) {

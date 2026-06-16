@@ -27,14 +27,7 @@ export function initAddressBar() {
   on(addr, 'focus', () => addr.select());
   on(addr, 'blur', () => setTimeout(closeSuggest, 120)); // delay so a row mousedown can commit
 
-  // Ctrl+L when the toolbar itself has focus (page-focus case handled in main/shortcuts).
-  on(window, 'keydown', (e) => {
-    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
-      e.preventDefault();
-      addr.focus();
-      addr.select();
-    }
-  });
+  // Ctrl+L (focus address) is handled in main via before-input-event → this event.
   window.pane.onFocusAddress(() => { addr.focus(); addr.select(); });
 
   window.pane.onNavState((d) => {

@@ -34,6 +34,13 @@ class PaneWindow {
 
     this.win.contentView.addChildView(this.chrome.view);
     this._connect();
+
+    // Chrome-focus keyboard shortcuts via before-input-event — preventDefault here reliably
+    // stops the input reaching the page, so Ctrl+Tab etc. don't trigger the toolbar's
+    // default focus traversal (the page-focus case is wired per-tab in TabManager).
+    const { handlePageKey } = require('./shortcuts');
+    this.chrome.webContents.on('before-input-event', (e, input) => handlePageKey(this.tabs, e, input));
+
     this.tabs.newTab(); // initial tab → start page
 
     // DESIGN §5: reposition synchronously on resize (don't gate behind renderer rAF).
