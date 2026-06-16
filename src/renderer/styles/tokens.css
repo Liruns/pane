@@ -36,4 +36,12 @@
   /* type */
   --font-ui: "Inter", "Segoe UI Variable Text", "Segoe UI", -apple-system, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", "Cascadia Code", ui-monospace, "SF Mono", monospace;
+
+  /* motion (DESIGN §15) — ease curves for chrome; spring is reserved for future gestures */
+  --motion-fast: 150ms;     /* hover, icon crossfade, ring draw-in, tap feedback */
+  --motion-standard: 300ms; /* menu/popover open; loading-bar completion leg */
+  --motion-slow: 500ms;     /* new-tab / settings transitions */
+  --ease-enter: cubic-bezier(0.2, 0.6, 0.25, 1);    /* popovers, dropdowns arriving */
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);          /* dismissals, fades-out */
+  --ease-standard: cubic-bezier(0.25, 0.1, 0.25, 1); /* two-way chrome transitions */
 }
