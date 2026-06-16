@@ -55,7 +55,9 @@ favicons, Ctrl+Tab cycling, dbl-click-maximize), one `WebContentsView` per tab, 
 address bar (scheme / localhost / IPv4 / IPv6 / IDN / Windows-path → load, else search)
 with a **Go-to / Search suggestion dropdown**, back/forward/reload↔stop, detached devtools,
 trickle loading bar (aborts on failure), native window controls + window drag, resize
-integrity, new-tab start page, custom error page, bundled Inter font.
+integrity, new-tab start page, custom error page, bundled Inter font, **visited history +
+omnibox autocomplete**, **session restore** + ⋮ settings menu (toggle / clear history),
+**find-in-page** (Ctrl+F), per-tab **zoom** (Ctrl±/0).
 
 Remaining hardening (deferred): full Public Suffix List — the parser uses a TLD heuristic
 and leans on the error page's "Search instead" as the rescue for dead hosts.
