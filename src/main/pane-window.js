@@ -80,6 +80,9 @@ class PaneWindow {
       this.win.contentView.addChildView(view.view, 0); // below the chrome in z-order
       this._lastBounds = null; // force re-layout for the newly shown view
       this.layout();
+      // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
+      // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
+      if (!view.webContents.isDestroyed()) view.webContents.focus();
     }
   }
 
