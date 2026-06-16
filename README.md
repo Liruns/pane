@@ -25,20 +25,24 @@ npm start        # launches Pane
 src/
   main/              # Electron main (Node, CommonJS)
     index.js         # app lifecycle + window bootstrap
-    pane-window.js   # window shell: BaseWindow + view layout/resize + event bridge
-    page-view.js     # PageView controller (nav + events) — multi-instance ready (tabs → canvas)
+    pane-window.js   # window shell: BaseWindow + view layout/resize + active-tab swap + bridge
+    tab-manager.js   # owns the tabs (one PageView each) + which is active
+    page-view.js     # PageView controller (nav + events) — one per tab
     chrome-view.js   # ChromeView controller (the toolbar view)
-    ipc.js           # ipcMain handlers → active page
-    shortcuts.js     # before-input-event keymap
+    ipc.js           # ipcMain handlers → active tab / window
+    shortcuts.js     # before-input-event keymap (per tab)
     nav-history.js   # canGoBack/forward helpers
   preload/
     index.js         # window.pane bridge
   renderer/          # the chrome UI (native ES modules, no bundler)
     index.html
     main.js          # entry — wires the feature modules
-    features/        # address-bar · url-parser · navigation · loading-bar · window-controls
+    features/        # tabs · address-bar · url-parser · suggestions · navigation · loading-bar · window-controls
     lib/dom.js       # $ / on helpers
-    styles/          # index.css → tokens · base · toolbar · address-bar · controls
+    styles/          # index.css → fonts · tokens · base · toolbar · tabs · address-bar · suggestions · controls
+  shared/            # cross-process (CommonJS)
+    channels.js      # IPC channel names (main + preload)
+    config.js        # window sizes, default URL, chrome/toolbar heights
   shared/            # cross-process (CommonJS)
     channels.js      # IPC channel names (main + preload)
     config.js        # window sizes, default URL, toolbar height
@@ -46,13 +50,15 @@ src/
 
 ## v0 status
 
-Done: frameless Mica window, toolbar, single `WebContentsView`, smart address bar
-(scheme / localhost / IPv4 / IPv6 / IDN / Windows-path → load, else search),
-back/forward/reload, detached devtools, trickle loading bar (aborts on failure),
-native window controls, resize integrity, new-tab start page, custom error page,
-bundled Inter font.
+Done: frameless window, two-row chrome (tab strip + toolbar), **tabs** (TabManager,
+favicons, Ctrl+Tab cycling, dbl-click-maximize), one `WebContentsView` per tab, smart
+address bar (scheme / localhost / IPv4 / IPv6 / IDN / Windows-path → load, else search)
+with a **Go-to / Search suggestion dropdown**, back/forward/reload↔stop, detached devtools,
+trickle loading bar (aborts on failure), native window controls + window drag, resize
+integrity, new-tab start page, custom error page, bundled Inter font.
 
-Remaining hardening (deferred): full Public Suffix List + "Go to" omnibox suggestions.
+Remaining hardening (deferred): full Public Suffix List — the parser uses a TLD heuristic
+and leans on the error page's "Search instead" as the rescue for dead hosts.
 
 Mica-through-toolbar is **blocked**: `backgroundMaterial: 'mica'` + `titleBarOverlay` (the native
 window buttons) renders black and breaks on maximize (electron#42393 / #39959 / #41824). The brief
