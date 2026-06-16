@@ -1,30 +1,54 @@
-// Smart address parsing — minimal v0 of DESIGN.md §10.
-// Pure function (no DOM, no IPC) so it stays unit-testable. The full pipeline
-// (Public Suffix List, IDN→punycode, IPv6, single-label intranet) is a follow-up.
+// Smart address parsing — DESIGN.md §10. Pure function (no DOM/IPC), unit-testable.
+// Uses the URL API for IDN→punycode + validation. The Public Suffix List is the
+// remaining hardening (documented follow-up); a dotted host that turns out dead
+// is rescued by the custom error page's "Search instead".
 
-const PACKAGE_DENYLIST = /^(socket\.io|node\.js|vue\.js|next\.js|nuxt\.js|three\.js)$/i;
-const SEARCH = (q) => 'https://www.google.com/search?q=' + encodeURIComponent(q);
+const SEARCH_BASE = 'https://www.google.com/search?q=';
+const search = (q) => SEARCH_BASE + encodeURIComponent(q);
 
-/** @returns {string|null} a URL to load, or null for empty input. */
+const isIPv4 = (h) => {
+  const parts = h.split('.');
+  return parts.length === 4 && parts.every((o) => /^\d{1,3}$/.test(o) && Number(o) <= 255);
+};
+
+/**
+ * Resolve raw omnibox input to a URL to load, or a search URL.
+ * @returns {string|null} url to load, or null for empty input.
+ */
 export function toNavURL(raw) {
   const s = raw.trim();
   if (!s) return null;
 
-  // 1. explicit scheme wins (whitelist about:blank)
-  if (s === 'about:blank') return s;
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) return s;
+  // about: — only about:blank is navigable from the omnibox
+  if (/^about:/i.test(s)) return /^about:blank$/i.test(s) ? 'about:blank' : search(s);
 
-  // 2. loopback / IP [:port]
-  if (/^(localhost|127\.0\.0\.1)(:\d+)?(\/.*)?$/i.test(s)) return 'http://' + s;
-  if (/^\[?::1\]?(:\d+)?(\/.*)?$/.test(s)) return 'http://' + s;
-  if (/^\d{1,3}(\.\d{1,3}){3}(:\d+)?(\/.*)?$/.test(s)) return 'http://' + s;
+  // Windows path → file URL (C:\dir\file.html or C:/dir)
+  if (/^[a-z]:[\\/]/i.test(s)) return 'file:///' + s.replace(/\\/g, '/');
 
-  // 3. bare host: no spaces, has a dot, last label looks like a TLD, not a known package
-  const head = s.split(/[/?#]/)[0];
-  if (!/\s/.test(s) && /^[^\s.]+(\.[^\s.]+)+(:\d+)?$/.test(head) && /\.[a-z]{2,}(:\d+)?$/i.test(head)) {
-    if (!PACKAGE_DENYLIST.test(head)) return 'https://' + s;
+  // explicit scheme → load as-is (never re-prefix). Unknown schemes typed as text → search.
+  const scheme = s.match(/^([a-z][a-z0-9+.-]*):\/\//i);
+  if (scheme) {
+    const proto = scheme[1].toLowerCase();
+    if ((proto === 'http' || proto === 'https' || proto === 'file') && URL.canParse(s)) return s;
+    return search(s);
   }
 
-  // 4. otherwise: search
-  return SEARCH(s);
+  const hostPort = s.split(/[/?#]/)[0];
+  const host = hostPort.replace(/:\d+$/, '');
+
+  // loopback / IP / IPv6 [:port][/path]
+  if (/^localhost$/i.test(host)) return 'http://' + s;
+  if (/^\[[0-9a-f:]+\]$/i.test(host)) return 'http://' + s;     // [::1], [2001:db8::1]
+  if (/^::1$/.test(host)) return 'http://[::1]' + s.slice(3);    // bare ::1[:port]
+  if (isIPv4(host)) return 'http://' + s;
+
+  // bare host with a dot → likely a hostname (URL API normalizes IDN → punycode)
+  if (!/\s/.test(s) && host.includes('.')) {
+    const lastLabel = host.split('.').pop() || '';
+    const tldLike = /^[a-z]{2,24}$/i.test(lastLabel) || /^xn--/i.test(lastLabel);
+    if (tldLike && URL.canParse('https://' + s)) return 'https://' + s;
+  }
+
+  // single-label or free text → search (no synchronous DNS; "Go to" suggestion is a follow-up)
+  return search(s);
 }

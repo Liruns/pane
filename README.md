@@ -47,11 +47,12 @@ src/
 ## v0 status
 
 Done: frameless Mica window, toolbar, single `WebContentsView`, smart address bar
-(load URL/host/localhost/IP, else search), back/forward/reload, detached devtools,
-animated loading bar, native window controls, resize integrity.
+(scheme / localhost / IPv4 / IPv6 / IDN / Windows-path → load, else search),
+back/forward/reload, detached devtools, trickle loading bar (aborts on failure),
+native window controls, resize integrity, new-tab start page, custom error page,
+bundled Inter font.
 
-Follow-ups (intentionally deferred): full §10 address parser (Public Suffix List, IDN,
-IPv6, single-label intranet), bundled Inter font, custom in-app error page, Mica-through-
-toolbar (flip `--toolbar-bg` in `chrome.css` and confirm on a Win11 box).
+Remaining hardening (deferred): full Public Suffix List + "Go to" omnibox suggestions;
+Mica-through-toolbar (flip `--toolbar-bg` in `styles/tokens.css` and confirm on a Win11 box).
 
 Not in v0 (roadmap): tabs → runtime/devtools depth → infinite-canvas multi-instance.

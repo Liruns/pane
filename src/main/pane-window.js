@@ -1,6 +1,6 @@
 'use strict';
 const { BaseWindow, shell } = require('electron');
-const { TOOLBAR_HEIGHT, WINDOW, COLORS, DEFAULT_URL } = require('../shared/config');
+const { TOOLBAR_HEIGHT, WINDOW, COLORS } = require('../shared/config');
 const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
 const PageView = require('./page-view');
@@ -33,7 +33,7 @@ class PaneWindow {
     this._lastBounds = null;
     this._connect();
     this.layout();
-    this.page.navigate(DEFAULT_URL);
+    this.page.loadStart(); // open on the new-tab start page (DESIGN §14)
 
     // DESIGN §5: reposition synchronously on resize (don't gate behind renderer rAF).
     this.win.on('will-resize', () => this.layout());
