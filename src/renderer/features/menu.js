@@ -49,11 +49,29 @@ function close() {
 
 function render() {
   panel.replaceChildren();
+  // DESIGN §8: when the toolbar collapses the DevTools button at narrow widths, surface it here
+  // so it stays reachable. Detect via the button's computed display (robust to the breakpoint).
+  const dt = document.getElementById('devtools');
+  if (dt && getComputedStyle(dt).display === 'none') {
+    action('Toggle DevTools', 'Ctrl+Shift+I', () => window.pane.toggleDevTools());
+    sep();
+  }
   item('Bookmarks', '', 'pane://bookmarks/');
   item('History', 'Ctrl+H', 'pane://history/');
   item('Downloads', 'Ctrl+J', 'pane://downloads/');
   sep();
   item('Settings', 'Ctrl+,', 'pane://settings/');
+}
+
+// A menu row that runs a callback instead of navigating (e.g. the collapsed DevTools toggle).
+function action(label, hint, fn) {
+  const row = document.createElement('div');
+  row.className = 'm-row';
+  row.setAttribute('role', 'menuitem');
+  row.tabIndex = -1;
+  row.innerHTML = `<span class="m-label">${label}</span>` + (hint ? `<span class="m-key">${hint}</span>` : '');
+  on(row, 'click', () => { fn(); close(); });
+  panel.append(row);
 }
 
 function item(label, hint, target) {
