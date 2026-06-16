@@ -1,7 +1,9 @@
 // Smart address parsing — DESIGN.md §10. Pure function (no DOM/IPC), unit-testable.
-// Uses the URL API for IDN→punycode + validation. The Public Suffix List is the
-// remaining hardening (documented follow-up); a dotted host that turns out dead
-// is rescued by the custom error page's "Search instead".
+// Uses the URL API for IDN→punycode + validation, and the bundled IANA TLD list
+// (lib/tlds.js — the Public Suffix List's top level) to decide whether a dotted token
+// is a real host or a search. A dotted host that turns out dead is still rescued by the
+// custom error page's "Search instead".
+import { TLDS } from '../lib/tlds.js';
 
 export const SEARCH_BASE = 'https://www.google.com/search?q=';
 export const search = (q) => SEARCH_BASE + encodeURIComponent(q);
@@ -57,13 +59,14 @@ export function toNavURL(raw) {
   if (/^\[[0-9a-f:]+\]$/i.test(host)) return proto + s;         // [::1], [2001:db8::1]
   if (isIPv4(host)) return proto + s;
 
-  // bare host with a dot → likely a hostname (URL API normalizes IDN → punycode)
+  // bare host with a dot → load only if the public suffix is a real TLD (DESIGN §10.4).
   if (!/\s/.test(s) && host.includes('.')) {
-    // "looks-like-a-package" tokens resolve to search, never auto-load (DESIGN §10.4).
+    // "looks-like-a-package" tokens resolve to search, never auto-load.
     if (PACKAGE_DENYLIST.has(host.toLowerCase())) return search(s);
-    const lastLabel = host.split('.').pop() || '';
-    const tldLike = /^[a-z]{2,24}$/i.test(lastLabel) || /^xn--/i.test(lastLabel);
-    if (tldLike && URL.canParse('https://' + s)) return 'https://' + s;
+    if (URL.canParse('https://' + s)) {
+      const tld = new URL('https://' + s).hostname.split('.').pop() || ''; // IDN → punycode
+      if (TLDS.has(tld)) return 'https://' + s;
+    }
   }
 
   // single-label or free text → search (no synchronous DNS; "Go to" suggestion is a follow-up)
