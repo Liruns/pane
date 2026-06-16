@@ -2,10 +2,9 @@
 // then the Go-to / Search actions. While open, the chrome view grows to cover the panel
 // (via the overlay helper); the chrome is transparent around it so the page shows through.
 import { $, on } from '../lib/dom.js';
-import { toNavURL } from './url-parser.js';
+import { toNavURL, search, SEARCH_BASE } from './url-parser.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
 
-const SEARCH = 'https://www.google.com/search?q=';
 const ROW_H = 36;
 
 const ICON = {
@@ -45,14 +44,14 @@ const display = (u) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
 function actions(s) {
   const url = toNavURL(s);
   if (!url) return [];
-  if (url.startsWith(SEARCH)) {
+  if (url.startsWith(SEARCH_BASE)) {
     const out = [{ icon: 'search', label: `Search for “${s}”`, url }];
     if (!/\s/.test(s) && s.includes('.')) out.push({ icon: 'go', label: `Go to ${s}`, url: 'https://' + s });
     return out;
   }
   return [
     { icon: 'go', label: `Go to ${hostOf(url)}`, url },
-    { icon: 'search', label: `Search for “${s}”`, url: SEARCH + encodeURIComponent(s) },
+    { icon: 'search', label: `Search for “${s}”`, url: search(s) },
   ];
 }
 
