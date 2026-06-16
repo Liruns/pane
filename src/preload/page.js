@@ -15,5 +15,9 @@ if (location.protocol === 'pane:') {
       get: () => ipcRenderer.invoke('pane-internal:settings-get'),
       set: (key, value) => ipcRenderer.invoke('pane-internal:settings-set', key, value),
     },
+    bookmarks: {
+      list: (opts) => ipcRenderer.invoke('pane-internal:bookmarks-list', opts),
+      remove: (url) => ipcRenderer.invoke('pane-internal:bookmarks-remove', url),
+    },
   });
 }

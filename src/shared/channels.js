@@ -29,4 +29,5 @@ module.exports = {
   TITLE: 'pane:title',
   FOCUS_ADDRESS: 'pane:focus-address',
   TABS_STATE: 'pane:tabs-state',
+  TOAST: 'pane:toast',
 };

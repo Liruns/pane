@@ -4,6 +4,7 @@
 const { ipcMain } = require('electron');
 const history = require('./history');
 const settings = require('./settings');
+const bookmarks = require('./bookmarks');
 
 const fromInternal = (event) => {
   try { return new URL(event.senderFrame.url).protocol === 'pane:'; } catch { return false; }
@@ -24,6 +25,9 @@ function registerInternalIpc(getWindow) {
 
   ipcMain.handle('pane-internal:settings-get', (e) => (fromInternal(e) ? settings.getAll() : {}));
   ipcMain.handle('pane-internal:settings-set', (e, key, value) => { if (fromInternal(e)) settings.set(key, value); });
+
+  ipcMain.handle('pane-internal:bookmarks-list', (e, opts) => (fromInternal(e) ? bookmarks.list(opts) : []));
+  ipcMain.handle('pane-internal:bookmarks-remove', (e, url) => { if (fromInternal(e)) bookmarks.remove(url); });
 }
 
 module.exports = { registerInternalIpc, fromInternal };

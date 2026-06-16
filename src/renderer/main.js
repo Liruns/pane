@@ -7,6 +7,7 @@ import { initLoadingBar } from './features/loading-bar.js';
 import { initWindowControls } from './features/window-controls.js';
 import { initMenu } from './features/menu.js';
 import { initFind } from './features/find.js';
+import { initToast } from './features/toast.js';
 
 initTabs();
 initNavigation();
@@ -15,3 +16,4 @@ initLoadingBar();
 initWindowControls();
 initMenu();
 initFind();
+initToast();

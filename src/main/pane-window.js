@@ -123,6 +123,7 @@ class PaneWindow {
     tabs.on('focus-address', () => chrome.send(CH.FOCUS_ADDRESS));
     tabs.on('open-find', () => chrome.send(CH.OPEN_FIND));
     tabs.on('found', (r) => chrome.send(CH.FOUND_RESULT, r));
+    tabs.on('toast', (m) => chrome.send(CH.TOAST, m));
     tabs.on('open-external', (url) => { if (/^https?:/i.test(url)) shell.openExternal(url); });
     tabs.on('tabs', (state) => {
       chrome.send(CH.TABS_STATE, state);

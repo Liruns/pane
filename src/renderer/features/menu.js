@@ -40,14 +40,22 @@ function close() {
 
 function render() {
   panel.replaceChildren();
+  item('Bookmarks', '', 'pane://bookmarks/');
   item('History', 'Ctrl+H', 'pane://history/');
+  sep();
   item('Settings', 'Ctrl+,', 'pane://settings/');
 }
 
 function item(label, hint, target) {
   const row = document.createElement('div');
   row.className = 'm-row';
-  row.innerHTML = `<span class="m-label">${label}</span><span class="m-key">${hint}</span>`;
+  row.innerHTML = `<span class="m-label">${label}</span>` + (hint ? `<span class="m-key">${hint}</span>` : '');
   on(row, 'click', () => { window.pane.navigate(target); close(); });
   panel.append(row);
+}
+
+function sep() {
+  const s = document.createElement('div');
+  s.className = 'm-sep';
+  panel.append(s);
 }
