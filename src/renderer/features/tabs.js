@@ -15,7 +15,7 @@ let ctx; // the right-click context-menu panel
 export function initTabs() {
   const list = $('#tabs');
   on($('#newtab'), 'click', () => window.pane.newTab());
-  window.pane.onTabs((s) => { state = s; render(list, s); });
+  window.pane.onTabs((s) => { state = s; if (dragId == null) render(list, s); });
 
   initDrag(list);
   initContextMenu(list);
@@ -96,20 +96,26 @@ function dropPos(list, e) {
 }
 
 function mark(list, e) {
-  clearMarks(list);
+  clearDropMarks(list);
   const target = e.target.closest('.tab');
-  if (!target) return;
+  if (!target || Number(target.dataset.id) === dragId) return; // don't mark the dragged tab itself
   const r = target.getBoundingClientRect();
   target.classList.add(e.clientX > r.left + r.width / 2 ? 'drop-after' : 'drop-before');
 }
 
-function clearMarks(list) {
-  for (const el of list.querySelectorAll('.drop-before, .drop-after, .dragging')) {
-    el.classList.remove('drop-before', 'drop-after', 'dragging');
+// Clear only the drop-slot indicators — the dragged tab keeps `.dragging` until the drag ends.
+function clearDropMarks(list) {
+  for (const el of list.querySelectorAll('.drop-before, .drop-after')) {
+    el.classList.remove('drop-before', 'drop-after');
   }
 }
 
-function endDrag(list) { clearMarks(list); dragId = null; }
+function endDrag(list) {
+  clearDropMarks(list);
+  const dragged = list.querySelector('.dragging');
+  if (dragged) dragged.classList.remove('dragging');
+  dragId = null;
+}
 
 /* ── Right-click context menu ────────────────────────────────────────────── */
 function initContextMenu(list) {

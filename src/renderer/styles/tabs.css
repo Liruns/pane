@@ -34,7 +34,7 @@
   cursor: default;
   overflow: hidden;
   -webkit-app-region: no-drag;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
 }
 .tab:hover { background: rgba(255, 255, 255, 0.05); }
 .tab.active { background: var(--surface-1); color: var(--fg); }
