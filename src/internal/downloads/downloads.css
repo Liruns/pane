@@ -17,7 +17,7 @@ body { background: #0a0a0b; color: var(--fg); font-family: var(--font-ui); overf
   display: flex; align-items: center; justify-content: space-between;
   padding: 28px max(24px, 8vw) 16px; border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.head h1 { margin: 0; font-size: 28px; font-weight: 590; letter-spacing: -0.015em; }
+.head h1 { margin: 0; font-size: 24px; font-weight: 590; letter-spacing: -0.015em; }
 #clear { height: 32px; padding: 0 14px; border: 1px solid var(--hair); border-radius: 8px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: default; }
 #clear:hover { background: rgba(255,255,255,0.06); color: var(--fg); }
 
@@ -40,7 +40,7 @@ body { background: #0a0a0b; color: var(--fg); font-family: var(--font-ui); overf
 @keyframes indet { 0% { margin-left: -30%; } 100% { margin-left: 100%; } }
 
 .actions { flex: none; display: flex; align-items: center; gap: 6px; }
-.act { height: 28px; padding: 0 12px; border: 1px solid var(--hair); border-radius: 8px; background: transparent; color: var(--fg); font: inherit; font-size: 12.5px; cursor: default; }
+.act { height: 28px; padding: 0 12px; border: 1px solid var(--hair); border-radius: 8px; background: transparent; color: var(--fg); font: inherit; font-size: 13px; cursor: default; }
 .act:hover { background: rgba(255,255,255,0.06); }
 .act.del { width: 28px; padding: 0; display: grid; place-items: center; color: var(--faint); }
 .act.del:hover { color: var(--fg); }

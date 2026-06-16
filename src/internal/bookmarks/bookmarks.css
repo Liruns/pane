@@ -17,7 +17,7 @@ body { background: #0a0a0b; color: var(--fg); font-family: var(--font-ui); overf
   display: flex; align-items: center; gap: 16px;
   padding: 28px max(24px, 8vw) 16px; border-bottom: 1px solid rgba(255,255,255,0.06);
 }
-.head h1 { flex: none; margin: 0; font-size: 28px; font-weight: 590; letter-spacing: -0.015em; }
+.head h1 { flex: none; margin: 0; font-size: 24px; font-weight: 590; letter-spacing: -0.015em; }
 #search {
   flex: 1; max-width: 420px; height: 34px; padding: 0 14px; border-radius: 980px;
   background: rgba(255,255,255,0.06); border: 1px solid var(--hair); color: var(--fg);
