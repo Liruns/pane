@@ -4,21 +4,25 @@ const { TABSTRIP_HEIGHT, CHROME_HEIGHT, WINDOW, COLORS } = require('../shared/co
 const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
 const TabManager = require('./tab-manager');
+const { handlePageKey } = require('./shortcuts');
+const settings = require('./settings');
+const session = require('./session');
 
 /**
  * One browser window: a BaseWindow hosting the toolbar (ChromeView) over the active
- * tab's page. Owns layout/resize, swaps the visible page on tab change, and bridges
- * TabManager events → the toolbar.
+ * tab's page. Owns layout/resize, swaps the visible page on tab change, bridges
+ * TabManager events → the toolbar, and persists/restores the session.
  */
 class PaneWindow {
-  constructor() {
+  constructor(restore = null) {
+    const b = (restore && restore.bounds) || null;
     this.win = new BaseWindow({
-      width: WINDOW.width,
-      height: WINDOW.height,
+      width: (b && b.width) || WINDOW.width,
+      height: (b && b.height) || WINDOW.height,
+      x: b ? b.x : undefined,
+      y: b ? b.y : undefined,
       minWidth: WINDOW.minWidth,
       minHeight: WINDOW.minHeight,
-      // Frameless-with-native-buttons = titleBarStyle 'hidden' + titleBarOverlay
-      // (NOT frame:false). The WCO buttons sit in the top tab-strip row.
       titleBarStyle: 'hidden',
       titleBarOverlay: { color: COLORS.surface, symbolColor: COLORS.symbol, height: TABSTRIP_HEIGHT },
       backgroundColor: COLORS.canvas,
@@ -36,21 +40,44 @@ class PaneWindow {
     this._connect();
 
     // Chrome-focus keyboard shortcuts via before-input-event — preventDefault here reliably
-    // stops the input reaching the page, so Ctrl+Tab etc. don't trigger the toolbar's
-    // default focus traversal (the page-focus case is wired per-tab in TabManager).
-    const { handlePageKey } = require('./shortcuts');
+    // stops the input reaching the page, so Ctrl+Tab etc. don't trigger focus traversal.
     this.chrome.webContents.on('before-input-event', (e, input) => handlePageKey(this.tabs, e, input));
 
-    this.tabs.newTab(); // initial tab → start page
+    this._restoreTabs(restore);
 
     // DESIGN §5: reposition synchronously on resize (don't gate behind renderer rAF).
     this.win.on('will-resize', () => this.layout());
     this.win.on('resize', () => this.layout());
-    this.win.on('resized', () => this.layout());
+    this.win.on('resized', () => { this.layout(); this._saveSession(); });
+    this.win.on('moved', () => this._saveSession());
 
-    // Re-push current state once the toolbar renderer is ready — the initial
-    // tab/nav events fire before the renderer has registered its listeners.
     this.chrome.webContents.once('did-finish-load', () => this.tabs.refresh());
+  }
+
+  _restoreTabs(restore) {
+    const urls = restore && Array.isArray(restore.tabs) && restore.tabs.length ? restore.tabs : null;
+    if (urls) {
+      urls.forEach((u) => this.tabs.newTab(u || undefined));
+      const arr = this.tabs.tabs;
+      const idx = Math.min(Math.max(0, restore.activeIndex | 0), arr.length - 1);
+      if (arr[idx]) this.tabs.activate(arr[idx].id);
+    } else {
+      this.tabs.newTab(); // fresh start page
+    }
+  }
+
+  serialize() {
+    const tabs = this.tabs.tabs;
+    return {
+      tabs: tabs.map((t) => (/^https?:\/\//i.test(t.url) ? t.url : '')),
+      activeIndex: Math.max(0, tabs.findIndex((t) => t.id === this.tabs.activeId)),
+      bounds: this.win.getBounds(),
+    };
+  }
+
+  _saveSession() {
+    if (!settings.get('restoreSession')) return;
+    session.save(this.serialize());
   }
 
   layout() {
@@ -65,8 +92,8 @@ class PaneWindow {
     }
   }
 
-  /** Grow/shrink the chrome view to host an overlay (the suggestions dropdown). The view
-   *  is transparent below the toolbar, so the page shows through around the panel. */
+  /** Grow/shrink the chrome view to host an overlay (suggestions / menu). The view is
+   *  transparent below the toolbar, so the page shows through around the panel. */
   setChromeHeight(h) {
     const { width } = this.win.getContentBounds();
     this.chrome.view.setBounds({ x: 0, y: 0, width, height: Math.max(CHROME_HEIGHT, Math.round(h)) });
@@ -97,6 +124,7 @@ class PaneWindow {
     tabs.on('open-external', (url) => { if (/^https?:/i.test(url)) shell.openExternal(url); });
     tabs.on('tabs', (state) => {
       chrome.send(CH.TABS_STATE, state);
+      this._saveSession();
       const a = state.tabs.find((t) => t.id === state.activeId);
       win.setTitle(a && a.title && a.title !== 'New Tab' ? `${a.title} — Pane` : 'Pane');
     });

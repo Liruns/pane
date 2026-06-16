@@ -3,12 +3,15 @@
 const { app, BaseWindow } = require('electron');
 const PaneWindow = require('./pane-window');
 const { registerIpc } = require('./ipc');
+const settings = require('./settings');
+const session = require('./session');
 
 /** @type {PaneWindow | null} */
 let current = null;
 
 function createWindow() {
-  current = new PaneWindow();
+  const restore = settings.get('restoreSession') ? session.load() : null;
+  current = new PaneWindow(restore);
 }
 
 app.whenReady().then(() => {
@@ -18,6 +21,10 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BaseWindow.getAllWindows().length === 0) createWindow();
   });
+});
+
+app.on('before-quit', () => {
+  if (current && settings.get('restoreSession')) session.saveNow(current.serialize());
 });
 
 app.on('window-all-closed', () => {
