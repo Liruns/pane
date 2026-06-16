@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld('pane', {
   getSettings: () => ipcRenderer.invoke(CH.GET_SETTINGS),
   setSetting: (key, value) => ipcRenderer.invoke(CH.SET_SETTING, key, value),
   clearHistory: () => ipcRenderer.invoke(CH.CLEAR_HISTORY),
+  find: (text, opts) => ipcRenderer.invoke(CH.FIND, text, opts),
+  stopFind: () => ipcRenderer.invoke(CH.FIND_STOP),
+  onFound: (cb) => ipcRenderer.on(CH.FOUND_RESULT, (_e, r) => cb(r)),
+  onOpenFind: (cb) => ipcRenderer.on(CH.OPEN_FIND, () => cb()),
 
   // events ← main
   onNavState: (cb) => ipcRenderer.on(CH.NAV_STATE, (_e, d) => cb(d)),

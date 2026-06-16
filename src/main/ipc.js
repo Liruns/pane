@@ -30,6 +30,8 @@ function registerIpc(getWindow) {
     if (w) { w.win.isMaximized() ? w.win.unmaximize() : w.win.maximize(); }
   });
   ipcMain.handle(CH.SET_CHROME_HEIGHT, (_e, h) => { const w = getWindow(); if (w) w.setChromeHeight(h); });
+  ipcMain.handle(CH.FIND, (_e, text, opts) => { const p = active(); if (p) p.findInPage(text, opts); });
+  ipcMain.handle(CH.FIND_STOP, onActive((p) => p.stopFind()));
 
   ipcMain.handle(CH.HISTORY_QUERY, (_e, input) => history.query(input));
   ipcMain.handle(CH.CLEAR_HISTORY, () => history.clear());

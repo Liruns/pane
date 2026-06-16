@@ -14,7 +14,7 @@ const isInternalUrl = (u) => typeof u === 'string' && u.includes('/renderer/page
  * One web-page surface — a native WebContentsView plus its navigation behavior.
  * Self-contained controller: one instance today, many later (tabs → canvas).
  * Emits: 'loading'(bool), 'nav-state'(...), 'load-error'(...), 'title'(string),
- *        'favicon'(url), 'open-external'(url).
+ *        'favicon'(url), 'navigated'(url), 'found'(result), 'open-external'(url).
  */
 class PageView extends EventEmitter {
   constructor() {
@@ -39,8 +39,8 @@ class PageView extends EventEmitter {
     wc.on('did-start-navigation', (_e, url, isInPlace, isMainFrame) => {
       if (!isMainFrame || isInPlace) return;
       if (isInternalUrl(url)) { this._internalLoad = true; return; }
-      this._displayUrl = null;     // a real navigation → show the real URL
-      this.emit('favicon', '');    // clear the stale favicon until the new page reports one
+      this._displayUrl = null;
+      this.emit('favicon', '');
       this.emit('loading', true);
     });
 
@@ -53,6 +53,7 @@ class PageView extends EventEmitter {
 
     wc.on('page-title-updated', (_e, title) => this.emit('title', title));
     wc.on('page-favicon-updated', (_e, favs) => this.emit('favicon', (favs && favs[0]) || ''));
+    wc.on('found-in-page', (_e, result) => this.emit('found', result));
 
     wc.setWindowOpenHandler(({ url }) => {
       this.emit('open-external', url);
@@ -105,6 +106,15 @@ class PageView extends EventEmitter {
   stop() { this.webContents.stop(); }
   canGoBack() { return canGoBack(this.webContents); }
   canGoForward() { return canGoForward(this.webContents); }
+
+  zoomBy(delta) {
+    const wc = this.webContents;
+    wc.setZoomLevel(Math.max(-3, Math.min(5, wc.getZoomLevel() + delta)));
+  }
+  resetZoom() { this.webContents.setZoomLevel(0); }
+
+  findInPage(text, opts) { if (text) this.webContents.findInPage(text, opts); }
+  stopFind() { this.webContents.stopFindInPage('clearSelection'); }
 
   toggleDevTools() {
     const wc = this.webContents;

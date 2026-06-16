@@ -48,6 +48,7 @@ class TabManager extends EventEmitter {
     });
     view.on('navigated', (navUrl) => history.record(navUrl));
     view.on('favicon', (f) => { tab.favicon = f; this._emitTabs(); });
+    view.on('found', (r) => { if (id === this.activeId) this.emit('found', r); });
     view.on('loading', (loading) => {
       tab.loading = loading;
       this._emitTabs();

@@ -13,6 +13,10 @@ function handlePageKey(tabs, e, input) {
   else if (mod && key === 'w') { tabs.closeActive(); e.preventDefault(); }
   else if (mod && key === 'tab') { input.shift ? tabs.prevTab() : tabs.nextTab(); e.preventDefault(); }
   else if (mod && key === 'r') { if (active) active.reload(); }
+  else if (mod && key === 'f') { tabs.emit('open-find'); e.preventDefault(); }
+  else if (mod && (input.key === '=' || input.key === '+')) { if (active) active.zoomBy(0.5); e.preventDefault(); }
+  else if (mod && input.key === '-') { if (active) active.zoomBy(-0.5); e.preventDefault(); }
+  else if (mod && input.key === '0') { if (active) active.resetZoom(); e.preventDefault(); }
   else if (mod && input.shift && key === 'i') { if (active) active.toggleDevTools(); }
   else if (input.alt && input.key === 'ArrowLeft' && active && active.canGoBack()) { active.back(); }
   else if (input.alt && input.key === 'ArrowRight' && active && active.canGoForward()) { active.forward(); }

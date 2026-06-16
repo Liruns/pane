@@ -1,7 +1,7 @@
-// The ⋮ settings menu — a chrome overlay (like the suggestions dropdown). Holds the
+// The ⋮ settings menu — a chrome overlay (via the overlay helper). Holds the
 // session-restore toggle and the clear-history action.
 import { $, on } from '../lib/dom.js';
-import { close as closeSuggestions } from './suggestions.js';
+import { openOverlay, closeOverlay } from '../lib/overlay.js';
 
 let panel, btn;
 
@@ -22,7 +22,6 @@ export function initMenu() {
 }
 
 async function open() {
-  closeSuggestions();
   const settings = await window.pane.getSettings();
   render(settings);
 
@@ -31,13 +30,13 @@ async function open() {
   panel.hidden = false;
   const pr = panel.getBoundingClientRect(); // measure to right-align under the button
   panel.style.left = `${Math.max(8, r.right - pr.width)}px`;
-  window.pane.setChromeHeight(Math.ceil(panel.getBoundingClientRect().bottom + 8));
+  openOverlay(close, Math.ceil(panel.getBoundingClientRect().bottom + 8));
 }
 
 function close() {
   if (panel.hidden) return;
   panel.hidden = true;
-  window.pane.setChromeHeight(Math.ceil($('#toolbar').getBoundingClientRect().bottom));
+  closeOverlay(close);
 }
 
 function render(settings) {

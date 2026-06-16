@@ -1,9 +1,9 @@
 // The omnibox suggestion dropdown (DESIGN §10). History matches (from main) rank on top,
-// then the Go-to / Search actions. The toolbar is a fixed-height WebContentsView, so while
-// the dropdown is open we grow the chrome view (setChromeHeight) to cover the panel; the
-// chrome is transparent around it so the page shows through, and a click there closes it.
+// then the Go-to / Search actions. While open, the chrome view grows to cover the panel
+// (via the overlay helper); the chrome is transparent around it so the page shows through.
 import { $, on } from '../lib/dom.js';
 import { toNavURL } from './url-parser.js';
+import { openOverlay, closeOverlay } from '../lib/overlay.js';
 
 const SEARCH = 'https://www.google.com/search?q=';
 const ROW_H = 36;
@@ -91,7 +91,7 @@ export async function update(input) {
   panel.style.top = `${r.bottom + 4}px`;
   panel.style.width = `${r.width}px`;
   panel.hidden = false;
-  window.pane.setChromeHeight(Math.ceil(r.bottom + 4 + items.length * ROW_H + 20));
+  openOverlay(close, Math.ceil(r.bottom + 4 + items.length * ROW_H + 20));
 }
 
 export function close() {
@@ -99,7 +99,7 @@ export function close() {
   panel.hidden = true;
   rows = [];
   sel = -1;
-  window.pane.setChromeHeight(Math.ceil($('#toolbar').getBoundingClientRect().bottom));
+  closeOverlay(close);
 }
 
 export function isOpen() { return !panel.hidden; }
