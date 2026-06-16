@@ -28,3 +28,16 @@ document.getElementById('retry').addEventListener('click', () => { if (failedUrl
 document.getElementById('search').addEventListener('click', () => {
   go('https://www.google.com/search?q=' + encodeURIComponent(host || failedUrl));
 });
+
+// Certificate errors (Chromium net codes -200..-299): state the risk plainly and offer a
+// deliberately un-styled "Proceed anyway" that trusts this host for the tab, then reloads (DESIGN §14).
+const codeNum = Number(code);
+if (codeNum <= -200 && codeNum >= -299) {
+  document.getElementById('cause').textContent = `This connection isn't private. ${host} has a certificate problem.`;
+  const proceed = document.getElementById('proceed');
+  proceed.hidden = false;
+  proceed.addEventListener('click', async () => {
+    try { if (window.paneInternal && window.paneInternal.cert) await window.paneInternal.cert.allow(host); } catch { /* fall through to navigate */ }
+    if (failedUrl) go(failedUrl);
+  });
+}

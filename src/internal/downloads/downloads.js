@@ -64,7 +64,15 @@ async function render() {
     const name = document.createElement('div');
     name.className = 'name' + (d.state === 'completed' ? ' link' : '');
     name.textContent = d.filename;
-    if (d.state === 'completed') name.addEventListener('click', () => D.open(d.id));
+    if (d.state === 'completed') {
+      // Keyboard-accessible open affordance (DESIGN §6): focusable, Enter/Space activate.
+      name.setAttribute('role', 'button');
+      name.tabIndex = 0;
+      name.setAttribute('aria-label', `Open ${d.filename}`);
+      const openFile = () => D.open(d.id);
+      name.addEventListener('click', openFile);
+      name.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFile(); } });
+    }
     const sub = document.createElement('div');
     sub.className = 'sub';
     sub.textContent = subText(d);

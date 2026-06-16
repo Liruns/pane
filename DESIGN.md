@@ -164,13 +164,14 @@ Pane runs **one chrome surface** — the toolbar — and a small kit of controls
 - Height: 48px
 - Top edge: `inset 0 1px 0 rgba(255,255,255,0.05)` — a faint glass highlight
 - Bottom: `1px solid rgba(255,255,255,0.09)` hairline separating chrome from page
-- Layout: left cluster (nav buttons) · center (address pill, flexible) · right cluster (devtools, overflow) · **reserved WCO region** (window controls) at far right on Windows, sized via `env(titlebar-area-width)`
+- Layout: left cluster (nav buttons) · address pill (**left-anchored** right after the nav cluster, flexes to fill toward the right cluster, capped at `max-width: 1080px`) · right cluster (devtools, overflow) · **reserved WCO region** (window controls) at far right on Windows, sized via `env(titlebar-area-width)`. *(v2.1: the pill was originally center-floated; that stranded it with large dead gaps, so it is now left-anchored and fills the available width.)*
 - Drag: the bar is `-webkit-app-region: drag`; **every** interactive control inside it — buttons *and the address input* — is `no-drag`.
 
 ### Smart Address Bar (the pill)
 - Background: `rgba(255,255,255,0.06)` resting → `rgba(255,255,255,0.09)` focused
 - Text: `foreground` (focused), `foreground-muted` (resting URL); **monospace 13.5px**
 - Radius: **980px** (full pill — the signature capsule)
+- Alignment: **left-anchored** — starts ~8px after the reload button and flexes to fill toward the right cluster (`width:100%; max-width:1080px`), so it reads as the connected primary control rather than a centered island. (The new-tab/start-page pill stays centered — that's a different surface, §14.)
 - Height: 32px; padding: **0 12px** (on the spacing scale)
 - Resting edge: `1px solid rgba(255,255,255,0.16)`; **Focus: 2px ring `#2997ff`** (no glow, no shadow)
 - Drag: `-webkit-app-region: no-drag` — caret placement and text selection must work
@@ -307,7 +308,7 @@ A desktop browser's "responsive" axis is **window size and platform chrome**, no
 - Popover shadow: `0 8px 30px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06)`
 
 ### Example Component Prompts
-- "Build Pane's toolbar as a 48px bar with a **transparent** background (the Electron window uses `backgroundMaterial:'mica'`, so the desktop shows through); optionally overlay `rgba(22,22,24,0.55)` to deepen it. Add `inset 0 1px 0 rgba(255,255,255,0.05)` top edge and a `1px solid rgba(255,255,255,0.09)` bottom hairline. Left: three 30×30 icon buttons (back, forward, reload) in `rgba(245,245,247,0.62)`. Center: a flexible address pill. Right: devtools toggle + overflow, then reserve the window-controls gap with `padding-right: env(titlebar-area-width)`. The bar is `-webkit-app-region: drag`; every control including the address input is `no-drag`. Do NOT use `backdrop-filter` here."
+- "Build Pane's toolbar as a 48px bar with a **transparent** background (the Electron window uses `backgroundMaterial:'mica'`, so the desktop shows through); optionally overlay `rgba(22,22,24,0.55)` to deepen it. Add `inset 0 1px 0 rgba(255,255,255,0.05)` top edge and a `1px solid rgba(255,255,255,0.09)` bottom hairline. Left: three 30×30 icon buttons (back, forward, reload) in `rgba(245,245,247,0.62)`. Then a left-anchored, flexible address pill that fills toward the right cluster (`width:100%; max-width:1080px`). Right: devtools toggle + overflow, then reserve the window-controls gap with `padding-right: env(titlebar-area-width)`. The bar is `-webkit-app-region: drag`; every control including the address input is `no-drag`. Do NOT use `backdrop-filter` here."
 - "Build the smart address bar: a full-pill input (`border-radius: 980px`), 32px tall, `rgba(255,255,255,0.06)` fill, `1px solid rgba(255,255,255,0.16)` border, monospace 13.5px text in `#f5f5f7`, padding `0 12px`, `-webkit-app-region: no-drag`. A 16px leading status glyph (lock/search). On focus: fill `rgba(255,255,255,0.09)` and a `2px solid #2997ff` ring (no glow). No drop shadow."
 - "Build the loading bar: a 2px line at the top of the web view, fill `#0071e3`. Start the trickle on `did-start-loading`/main-frame `did-start-navigation`; ease width 0→80% over ~1.4s `ease-out`; on `did-stop-loading` ease 80→100% then fade opacity to 0 over 200ms; on `did-fail-load` complete-and-fade immediately so it never hangs. No gradient, no spring."
 - "Build the suggestion dropdown: `#272729` panel, 12px radius, rows at 6px radius, shadow `0 8px 30px rgba(0,0,0,0.45)` plus a `0 0 0 1px rgba(255,255,255,0.06)` ring; `backdrop-filter: blur(20px)` is fine here. Rows 8px/12px padding; mono URL + 12px Inter subtitle; matched substring `#f5f5f7`, rest `rgba(245,245,247,0.62)`; selected row hover `rgba(255,255,255,0.06)` with a leading `#2997ff` tick."

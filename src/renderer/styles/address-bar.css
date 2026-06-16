@@ -4,7 +4,7 @@
   align-items: center;
   gap: 8px;
   width: 100%;
-  max-width: 680px;
+  max-width: 1080px; /* DESIGN §4: fill toward the right cluster, capped so it never sprawls on ultra-wide */
   height: 32px;
   padding: 0 12px;
   border-radius: 980px;

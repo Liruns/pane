@@ -8,6 +8,7 @@ const { registerInternalIpc } = require('./internal-ipc');
 const downloads = require('./downloads');
 const settings = require('./settings');
 const session = require('./session');
+const history = require('./history');
 
 registerScheme(); // must run before app 'ready'
 
@@ -36,6 +37,7 @@ app.on('before-quit', () => {
     session.saveNow(current.serialize());
   }
   downloads.flush(); // persist any just-finished download still inside the save debounce
+  history.flush();   // persist the last ~1s of visits/titles still inside the save debounce
 });
 
 app.on('window-all-closed', () => {

@@ -11,6 +11,8 @@ export function initWindowControls() {
       const r = o.getBoundingClientRect();
       const reservedRight = window.innerWidth - (r.x + r.width);
       root.style.setProperty('--wco-right', Math.max(0, reservedRight) + 'px');
+    } else {
+      root.style.setProperty('--wco-right', '0px'); // WCO hidden (e.g. fullscreen) — don't strand the reserved gap
     }
   }
   if (navigator.windowControlsOverlay) {

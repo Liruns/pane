@@ -12,7 +12,14 @@ function readJSON(name, fallback) {
 }
 
 function writeJSON(name, data) {
-  try { fs.writeFileSync(file(name), JSON.stringify(data)); } catch { /* best-effort */ }
+  // Atomic write: a crash/power-loss mid-write must not corrupt the live file (readJSON would
+  // then silently discard the whole store). Write a temp file, then rename over the target.
+  try {
+    const target = file(name);
+    const tmp = `${target}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(data));
+    fs.renameSync(tmp, target); // rename is atomic on the same volume
+  } catch { /* best-effort */ }
 }
 
 module.exports = { readJSON, writeJSON };

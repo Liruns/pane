@@ -8,6 +8,8 @@ let panel, btn;
 
 export function initMenu() {
   btn = $('#menu-btn');
+  btn.setAttribute('aria-haspopup', 'menu');
+  btn.setAttribute('aria-expanded', 'false');
   panel = document.createElement('div');
   panel.id = 'menu';
   panel.setAttribute('role', 'menu');
@@ -31,6 +33,7 @@ function open() {
   const r = btn.getBoundingClientRect();
   panel.style.top = `${r.bottom + 6}px`;
   panel.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
   const pr = panel.getBoundingClientRect(); // measure to right-align under the button
   panel.style.left = `${Math.max(8, r.right - pr.width)}px`;
   openOverlay(close, Math.ceil(panel.getBoundingClientRect().bottom + 8));
@@ -40,6 +43,7 @@ function open() {
 function close() {
   if (panel.hidden) return;
   panel.hidden = true;
+  btn.setAttribute('aria-expanded', 'false');
   closeOverlay(close);
 }
 

@@ -28,5 +28,8 @@ if (location.protocol === 'pane:') {
       clear: () => ipcRenderer.invoke('pane-internal:downloads-clear'),
       onChanged: (cb) => ipcRenderer.on('pane-internal:downloads-changed', () => cb()),
     },
+    cert: {
+      allow: (host) => ipcRenderer.invoke('pane-internal:cert-allow', host), // "Proceed anyway" from the error page
+    },
   });
 }

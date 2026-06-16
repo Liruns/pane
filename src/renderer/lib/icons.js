@@ -12,4 +12,6 @@ export const ICONS = {
   arrowRight:  svg('<path d="M5 12h14M13 6l6 6-6 6"/>'),
   search:      svg('<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>'),
   history:     svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+  lock:        svg('<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', 1.8),
+  warning:     svg('<path d="M12 3.5L21 19H3z"/><path d="M12 10v4M12 16.5h.01"/>', 1.8),
 };

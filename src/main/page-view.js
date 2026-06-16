@@ -26,6 +26,8 @@ class PageView extends EventEmitter {
     this.view.setBackgroundColor(COLORS.canvas); // seam-hider (DESIGN §2)
     this._displayUrl = null;    // address-bar override for internal pages
     this._internalLoad = false; // suppress the loading bar for instant local pages
+    this._loading = false;      // current load state, re-read on tab activation (toolbar bar/glyph)
+    this._certAllow = new Set(); // hosts the user chose to proceed to past a cert error
     this._wireEvents();
   }
 
@@ -34,8 +36,8 @@ class PageView extends EventEmitter {
   _wireEvents() {
     const wc = this.webContents;
 
-    wc.on('did-start-loading', () => { if (!this._internalLoad) this.emit('loading', true); });
-    wc.on('did-stop-loading', () => { this._internalLoad = false; this.emit('loading', false); this._emitState(); });
+    wc.on('did-start-loading', () => { if (!this._internalLoad) { this._loading = true; this.emit('loading', true); } });
+    wc.on('did-stop-loading', () => { this._internalLoad = false; this._loading = false; this.emit('loading', false); this._emitState(); });
 
     // Electron 42: navigation-start events deliver a single `details` object
     // ({ url, isSameDocument, isMainFrame, ... }) — not the old positional args.
@@ -43,6 +45,7 @@ class PageView extends EventEmitter {
       if (!details.isMainFrame || details.isSameDocument) return;
       if (isInternalUrl(details.url)) { this._internalLoad = true; return; }
       this._displayUrl = null;
+      this._loading = true;
       this.emit('favicon', '');
       this.emit('loading', true);
     });
@@ -57,6 +60,17 @@ class PageView extends EventEmitter {
     wc.on('page-title-updated', (_e, title) => this.emit('title', title));
     wc.on('page-favicon-updated', (_e, favs) => this.emit('favicon', (favs && favs[0]) || ''));
     wc.on('found-in-page', (_e, result) => this.emit('found', result));
+    wc.on('devtools-opened', () => this.emit('devtools', true));
+    wc.on('devtools-closed', () => this.emit('devtools', false));
+
+    // Cert errors (DESIGN §14): block by default → the failed load falls to the error page, which
+    // offers an explicit "Proceed anyway". Proceeding calls allowCert(host) and reloads; on the
+    // retry this host is trusted for this tab only. Never auto-trust.
+    wc.on('certificate-error', (event, url, _error, _cert, callback) => {
+      let host = url; try { host = new URL(url).host; } catch { /* keep raw */ }
+      event.preventDefault();
+      callback(this._certAllow.has(host));
+    });
 
     wc.setWindowOpenHandler(({ url }) => {
       this.emit('open-external', url);
@@ -103,6 +117,7 @@ class PageView extends EventEmitter {
   loadError(url, code, desc) {
     this._displayUrl = url || '';
     this._internalLoad = true;
+    this._loading = false;
     this.emit('loading', false);
     this.emit('load-error', { code, desc, url });
     const q = new URLSearchParams({ url: url || '', code: String(code ?? ''), desc: desc || '' });
@@ -115,6 +130,9 @@ class PageView extends EventEmitter {
   stop() { this.webContents.stop(); }
   canGoBack() { return canGoBack(this.webContents); }
   canGoForward() { return canGoForward(this.webContents); }
+  isLoading() { return this._loading; }
+  isDevToolsOpen() { const wc = this.webContents; return !wc.isDestroyed() && wc.isDevToolsOpened(); }
+  allowCert(host) { if (host) this._certAllow.add(host); } // user chose "Proceed anyway" for this host
 
   zoomBy(delta) {
     const wc = this.webContents;

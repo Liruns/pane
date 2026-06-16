@@ -12,10 +12,11 @@ export function initNavigation() {
   on(back, 'click', () => window.pane.back());
   on(forward, 'click', () => window.pane.forward());
   on(reload, 'click', () => (loading ? window.pane.stop() : window.pane.reload()));
-  on(devtools, 'click', (e) => {
-    e.currentTarget.classList.toggle('active');
-    window.pane.toggleDevTools();
-  });
+  on(devtools, 'click', () => window.pane.toggleDevTools()); // state comes back via onDevToolsState
+
+  // Drive the active (#2997ff) state from the REAL devtools state, not an optimistic toggle, so it
+  // stays correct across keyboard toggle, closing the detached window, and tab switches (DESIGN §4/§14).
+  window.pane.onDevToolsState((d) => devtools.classList.toggle('active', !!(d && d.open)));
 
   window.pane.onNavState((d) => {
     back.disabled = !d.canGoBack;

@@ -36,6 +36,7 @@ contextBridge.exposeInMainWorld('pane', {
   // events ← main
   onNavState: (cb) => ipcRenderer.on(CH.NAV_STATE, (_e, d) => cb(d)),
   onLoading: (cb) => ipcRenderer.on(CH.LOADING, (_e, d) => cb(d)),
+  onDevToolsState: (cb) => ipcRenderer.on(CH.DEVTOOLS_STATE, (_e, d) => cb(d)),
   onLoadError: (cb) => ipcRenderer.on(CH.LOAD_ERROR, (_e, d) => cb(d)),
   onFocusAddress: (cb) => ipcRenderer.on(CH.FOCUS_ADDRESS, () => cb()),
   onTabs: (cb) => ipcRenderer.on(CH.TABS_STATE, (_e, d) => cb(d)),

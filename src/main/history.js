@@ -13,6 +13,8 @@ function load() {
   return log;
 }
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => writeJSON(FILE, log), 1000); }
+/** Force the debounced save now — call on app quit so the last ~1s of visits/titles isn't lost. */
+function flush() { clearTimeout(saveTimer); if (log) writeJSON(FILE, log); }
 
 function record(url) {
   if (!url || !/^https?:\/\//i.test(url)) return; // only real web pages
@@ -78,4 +80,4 @@ function remove(url, time) {
 
 function clear() { log = []; writeJSON(FILE, log); }
 
-module.exports = { record, updateTitle, query, list, remove, clear };
+module.exports = { record, updateTitle, query, list, remove, clear, flush };
