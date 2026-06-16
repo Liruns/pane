@@ -12,8 +12,8 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-  // IPC handlers route to whichever window is active (single window for now).
-  registerIpc(() => (current ? current.page : null));
+  // IPC handlers resolve the active window lazily (→ its TabManager → active tab).
+  registerIpc(() => current);
   createWindow();
   app.on('activate', () => {
     if (BaseWindow.getAllWindows().length === 0) createWindow();

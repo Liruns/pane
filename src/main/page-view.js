@@ -73,6 +73,18 @@ class PageView extends EventEmitter {
 
   navigate(url) { this.webContents.loadURL(url); }
 
+  /** Re-emit the current nav state (used when this tab becomes active). */
+  refreshState() { this._emitState(); }
+
+  /** Release the webContents when the tab is closed. */
+  destroy() {
+    this.removeAllListeners();
+    const wc = this.webContents;
+    if (wc && !wc.isDestroyed() && typeof wc.close === 'function') {
+      try { wc.close(); } catch { /* already gone */ }
+    }
+  }
+
   /** The new-tab / start page (DESIGN §14). */
   loadStart() {
     this._displayUrl = '';

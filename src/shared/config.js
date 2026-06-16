@@ -2,7 +2,9 @@
 // App-wide constants shared by main-process modules.
 // (Renderer visual tokens live in renderer/styles/tokens.css — DESIGN.md is the spec for both.)
 module.exports = {
+  TABSTRIP_HEIGHT: 40,
   TOOLBAR_HEIGHT: 48,
+  CHROME_HEIGHT: 88, // TABSTRIP_HEIGHT + TOOLBAR_HEIGHT
   DEFAULT_URL: 'https://example.com',
   WINDOW: { width: 1200, height: 800, minWidth: 640, minHeight: 480 },
   COLORS: {

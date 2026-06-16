@@ -1,0 +1,69 @@
+/* The tab strip — top row of the chrome. Holds the WCO reservation + drag region. */
+#tabstrip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--tabstrip-h);
+  padding: 0 var(--wco-right) 0 8px; /* keep tabs clear of the native window controls */
+  background: var(--toolbar-bg);
+  -webkit-app-region: drag;
+}
+
+#tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  min-width: 88px;
+  max-width: 200px;
+  padding: 0 6px 0 12px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 12.5px;
+  cursor: default;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.tab:hover { background: rgba(255, 255, 255, 0.05); }
+.tab.active { background: var(--surface-1); color: var(--fg); }
+
+.tab .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab .close {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-faint);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: default;
+  opacity: 0;
+  transition: opacity 0.12s ease, background 0.12s ease, color 0.12s ease;
+}
+.tab:hover .close, .tab.active .close { opacity: 1; }
+.tab .close:hover { background: rgba(255, 255, 255, 0.12); color: var(--fg); }
+.tab .close svg { width: 12px; height: 12px; }
+
+#newtab { flex: none; }

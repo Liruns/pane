@@ -9,10 +9,14 @@ module.exports = {
   RELOAD: 'pane:reload',
   STOP: 'pane:stop',
   TOGGLE_DEVTOOLS: 'pane:toggle-devtools',
+  TAB_NEW: 'pane:tab-new',
+  TAB_CLOSE: 'pane:tab-close',
+  TAB_ACTIVATE: 'pane:tab-activate',
   // main → renderer (send)
   NAV_STATE: 'pane:nav-state',
   LOADING: 'pane:loading',
   LOAD_ERROR: 'pane:load-error',
   TITLE: 'pane:title',
   FOCUS_ADDRESS: 'pane:focus-address',
+  TABS_STATE: 'pane:tabs-state',
 };

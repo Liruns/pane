@@ -1,22 +1,20 @@
 'use strict';
-const CH = require('../shared/channels');
+// Keyboard handling for a tab's webContents (page-focus case). Routes to the TabManager.
+// Wired per-tab in TabManager.newTab so shortcuts work in every tab. The chrome-focus
+// case (toolbar/tabstrip focused) is handled in the renderer.
+function handlePageKey(tabs, e, input) {
+  if (input.type !== 'keyDown') return;
+  const mod = input.control || input.meta;
+  const key = (input.key || '').toLowerCase();
+  const active = tabs.active;
 
-/**
- * Global-ish keyboard shortcuts that must work even when the page (not the toolbar)
- * has focus. Registered on the page's webContents via before-input-event.
- */
-function registerShortcuts(page, chrome) {
-  page.webContents.on('before-input-event', (e, input) => {
-    if (input.type !== 'keyDown') return;
-    const mod = input.control || input.meta;
-    const key = (input.key || '').toLowerCase();
-
-    if (mod && key === 'l') { chrome.send(CH.FOCUS_ADDRESS); e.preventDefault(); }
-    else if (mod && key === 'r') { page.reload(); }
-    else if (mod && input.shift && key === 'i') { page.toggleDevTools(); }
-    else if (input.alt && input.key === 'ArrowLeft' && page.canGoBack()) { page.back(); }
-    else if (input.alt && input.key === 'ArrowRight' && page.canGoForward()) { page.forward(); }
-  });
+  if (mod && key === 'l') { tabs.emit('focus-address'); e.preventDefault(); }
+  else if (mod && key === 't') { tabs.newTab(); e.preventDefault(); }
+  else if (mod && key === 'w') { tabs.closeActive(); e.preventDefault(); }
+  else if (mod && key === 'r') { if (active) active.reload(); }
+  else if (mod && input.shift && key === 'i') { if (active) active.toggleDevTools(); }
+  else if (input.alt && input.key === 'ArrowLeft' && active && active.canGoBack()) { active.back(); }
+  else if (input.alt && input.key === 'ArrowRight' && active && active.canGoForward()) { active.forward(); }
 }
 
-module.exports = { registerShortcuts };
+module.exports = { handlePageKey };

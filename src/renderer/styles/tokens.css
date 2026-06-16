@@ -24,6 +24,7 @@
   --success: #30d158;
 
   /* metrics */
+  --tabstrip-h: 40px;
   --toolbar-h: 48px;
   --wco-right: 140px; /* reserved for native window controls; set at runtime (window-controls.js) */
 
