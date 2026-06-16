@@ -5,8 +5,8 @@ const listEl = document.getElementById('list');
 const emptyEl = document.getElementById('empty');
 const clearBtn = document.getElementById('clear');
 
-const FILE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5"/><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/></svg>';
-const X_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>';
+const FILE_SVG = window.PaneIcons.file;
+const X_SVG = window.PaneIcons.close;
 
 const D = window.paneInternal.downloads;
 
