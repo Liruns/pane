@@ -45,4 +45,5 @@
   cursor: default;
 }
 .find-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--fg); }
+.find-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; } /* DESIGN §6 */
 .find-btn svg { width: 16px; height: 16px; }
