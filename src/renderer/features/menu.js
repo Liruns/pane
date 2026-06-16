@@ -2,6 +2,7 @@
 // pane:// internal pages (History, Settings). Settings logic lives on those pages, not here.
 import { $, on } from '../lib/dom.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
+import { initMenuNav, focusFirstItem } from '../lib/menu-nav.js';
 
 let panel, btn;
 
@@ -9,8 +10,10 @@ export function initMenu() {
   btn = $('#menu-btn');
   panel = document.createElement('div');
   panel.id = 'menu';
+  panel.setAttribute('role', 'menu');
   panel.hidden = true;
   document.body.append(panel);
+  initMenuNav(panel);
 
   on(btn, 'click', (e) => { e.stopPropagation(); panel.hidden ? open() : close(); });
   on(window, 'mousedown', (e) => {
@@ -18,7 +21,8 @@ export function initMenu() {
     if (e.target.closest('#menu') || e.target.closest('#menu-btn')) return;
     close();
   });
-  on(window, 'keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(); });
+  // Escape closes and returns focus to the trigger (keyboard round-trip).
+  on(window, 'keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) { close(); btn.focus(); } });
 }
 
 function open() {
@@ -30,6 +34,7 @@ function open() {
   const pr = panel.getBoundingClientRect(); // measure to right-align under the button
   panel.style.left = `${Math.max(8, r.right - pr.width)}px`;
   openOverlay(close, Math.ceil(panel.getBoundingClientRect().bottom + 8));
+  focusFirstItem(panel); // land keyboard focus in the menu so arrows/Enter work
 }
 
 function close() {
@@ -50,6 +55,8 @@ function render() {
 function item(label, hint, target) {
   const row = document.createElement('div');
   row.className = 'm-row';
+  row.setAttribute('role', 'menuitem');
+  row.tabIndex = -1;
   row.innerHTML = `<span class="m-label">${label}</span>` + (hint ? `<span class="m-key">${hint}</span>` : '');
   on(row, 'click', () => { window.pane.navigate(target); close(); });
   panel.append(row);

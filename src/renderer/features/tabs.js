@@ -4,6 +4,7 @@
 import { $, on } from '../lib/dom.js';
 import { ICONS } from '../lib/icons.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
+import { initMenuNav, focusFirstItem } from '../lib/menu-nav.js';
 
 // Only let web favicons into the privileged chrome document (no file:/pane:/js: schemes).
 const SAFE_FAVICON = /^(?:https?|data):/i;
@@ -14,11 +15,31 @@ let ctx; // the right-click context-menu panel
 
 export function initTabs() {
   const list = $('#tabs');
+  list.setAttribute('role', 'tablist');
   on($('#newtab'), 'click', () => window.pane.newTab());
   window.pane.onTabs((s) => { state = s; if (dragId == null) render(list, s); });
 
   initDrag(list);
+  initKeyboard(list);
   initContextMenu(list);
+}
+
+// Tablist keyboard: Arrow keys move focus between tabs (roving), Enter/Space activates.
+// (Ctrl+Tab still cycles the active tab; that's handled in the main process.)
+function initKeyboard(list) {
+  on(list, 'keydown', (e) => {
+    const el = e.target.closest('.tab');
+    if (!el) return;
+    const els = [...list.querySelectorAll('.tab')];
+    const i = els.indexOf(el);
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      els[(i + (e.key === 'ArrowRight' ? 1 : -1) + els.length) % els.length].focus();
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      window.pane.activateTab(Number(el.dataset.id));
+    }
+  });
 }
 
 function faviconEl(tab) {
@@ -36,13 +57,21 @@ function faviconEl(tab) {
 }
 
 function render(list, s) {
+  // Preserve keyboard focus across the rebuild (a background tab can update mid arrow-nav).
+  const act = document.activeElement;
+  const focusedId = act && act.classList && act.classList.contains('tab') ? Number(act.dataset.id) : null;
+
   list.replaceChildren();
   for (const t of s.tabs) {
+    const isActive = t.id === s.activeId;
     const tab = document.createElement('div');
-    tab.className = 'tab' + (t.id === s.activeId ? ' active' : '') + (t.loading ? ' loading' : '');
+    tab.className = 'tab' + (isActive ? ' active' : '') + (t.loading ? ' loading' : '');
     tab.title = t.url || t.title || '';
     tab.draggable = true;
     tab.dataset.id = t.id;
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    tab.tabIndex = isActive ? 0 : -1; // roving: the active tab is the strip's single tab-stop
 
     const title = document.createElement('span');
     title.className = 'title';
@@ -51,12 +80,20 @@ function render(list, s) {
     const close = document.createElement('button');
     close.className = 'close';
     close.setAttribute('aria-label', 'Close tab');
+    close.tabIndex = -1; // keep the strip one tab-stop; close via Ctrl+W or click
     close.innerHTML = ICONS.close;
 
     tab.append(faviconEl(t), title, close);
     on(tab, 'click', () => window.pane.activateTab(t.id));
     on(close, 'click', (e) => { e.stopPropagation(); window.pane.closeTab(t.id); });
     list.append(tab);
+  }
+
+  // Restore focus only while the chrome itself holds focus — otherwise activating a tab
+  // (which focuses the page) would immediately steal focus back to the strip.
+  if (focusedId != null && document.hasFocus()) {
+    const refocus = [...list.children].find((el) => Number(el.dataset.id) === focusedId);
+    if (refocus) refocus.focus();
   }
 }
 
@@ -121,8 +158,10 @@ function endDrag(list) {
 function initContextMenu(list) {
   ctx = document.createElement('div');
   ctx.className = 'ctx-menu';
+  ctx.setAttribute('role', 'menu');
   ctx.hidden = true;
   document.body.append(ctx);
+  initMenuNav(ctx);
 
   on(list, 'contextmenu', (e) => {
     const el = e.target.closest('.tab');
@@ -150,6 +189,7 @@ function openContextMenu(id, x, y) {
   ctx.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`;
   ctx.style.top = `${y}px`;
   openOverlay(closeContextMenu, Math.ceil(ctx.getBoundingClientRect().bottom + 8));
+  focusFirstItem(ctx); // keyboard can drive the menu once it's open
 }
 
 function closeContextMenu() {
@@ -161,6 +201,9 @@ function closeContextMenu() {
 function ctxItem(label, hint, action, disabled = false) {
   const row = document.createElement('div');
   row.className = 'm-row' + (disabled ? ' disabled' : '');
+  row.setAttribute('role', 'menuitem');
+  if (disabled) row.setAttribute('aria-disabled', 'true');
+  else row.tabIndex = -1;
   row.innerHTML = `<span class="m-label">${label}</span>` + (hint ? `<span class="m-key">${hint}</span>` : '');
   if (!disabled) on(row, 'click', () => { action(); closeContextMenu(); });
   ctx.append(row);

@@ -25,6 +25,7 @@
   cursor: default;
 }
 .m-row:hover { background: rgba(255, 255, 255, 0.06); }
+.m-row:focus { outline: none; background: rgba(255, 255, 255, 0.06); } /* keyboard highlight (DESIGN §6) */
 .m-row.disabled { color: var(--fg-faint); pointer-events: none; }
 .m-row.disabled .m-key { color: var(--fg-faint); }
 .m-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -38,6 +38,7 @@
 }
 .tab:hover { background: rgba(255, 255, 255, 0.05); }
 .tab.active { background: var(--surface-1); color: var(--fg); }
+.tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; } /* DESIGN §6 */
 
 /* drag-to-reorder: the dragged tab dims; a 2px accent bar marks the drop slot */
 .tab.dragging { opacity: 0.4; }
