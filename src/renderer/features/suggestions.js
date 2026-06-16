@@ -22,9 +22,16 @@ export function initSuggestions() {
   pill = $('#pill');
   panel = document.createElement('div');
   panel.id = 'suggestions';
+  panel.setAttribute('role', 'listbox');
   panel.hidden = true;
   document.body.append(panel);
   lastW = window.innerWidth;
+
+  // combobox a11y (DESIGN §6) — the input owns the listbox; selection is announced.
+  addr.setAttribute('role', 'combobox');
+  addr.setAttribute('aria-autocomplete', 'list');
+  addr.setAttribute('aria-controls', 'suggestions');
+  addr.setAttribute('aria-expanded', 'false');
 
   on(window, 'mousedown', (e) => {
     if (panel.hidden) return;
@@ -43,9 +50,13 @@ function actions(s) {
   const url = toNavURL(s);
   if (!url) return [];
   if (url.startsWith(SEARCH_BASE)) {
-    const out = [{ icon: 'search', label: `Search for “${s}”`, url }];
-    if (!/\s/.test(s) && s.includes('.')) out.push({ icon: 'go', label: `Go to ${s}`, url: 'https://' + s });
-    return out;
+    const se = { icon: 'search', label: `Search for “${s}”`, url };
+    // Plausibly a host (no spaces, dotted, parseable)? Surface "Go to" as #1 — search stays the
+    // default action (nothing is pre-selected), but the host is one keystroke away. DESIGN §10.5/6.
+    if (!/\s/.test(s) && s.includes('.') && URL.canParse('https://' + s)) {
+      return [{ icon: 'go', label: `Go to ${s}`, url: 'https://' + s }, se];
+    }
+    return [se];
   }
   return [
     { icon: 'go', label: `Go to ${hostOf(url)}`, url },
@@ -76,6 +87,8 @@ export async function update(input) {
   items.forEach((it, i) => {
     const row = document.createElement('div');
     row.className = 'sg-row';
+    row.setAttribute('role', 'option');
+    row.id = `sg-row-${i}`;
     row.innerHTML = `<span class="sg-icon">${ICON[it.icon]}</span><span class="sg-label"></span>`;
     row.querySelector('.sg-label').textContent = it.label;
     on(row, 'mousedown', (e) => { e.preventDefault(); commit(it.url); });
@@ -88,6 +101,7 @@ export async function update(input) {
   panel.style.top = `${r.bottom + 4}px`;
   panel.style.width = `${r.width}px`;
   panel.hidden = false;
+  addr.setAttribute('aria-expanded', 'true');
   openOverlay(close, Math.ceil(r.bottom + 4 + items.length * ROW_H + 20));
 }
 
@@ -96,6 +110,8 @@ export function close() {
   panel.hidden = true;
   rows = [];
   sel = -1;
+  addr.setAttribute('aria-expanded', 'false');
+  addr.removeAttribute('aria-activedescendant');
   closeOverlay(close);
 }
 
@@ -108,7 +124,13 @@ export function move(dir) {
 
 function highlight(i) {
   sel = i;
-  [...panel.children].forEach((c, j) => c.classList.toggle('selected', j === i));
+  [...panel.children].forEach((c, j) => {
+    const on = j === i;
+    c.classList.toggle('selected', on);
+    c.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  if (i >= 0 && panel.children[i]) addr.setAttribute('aria-activedescendant', panel.children[i].id);
+  else addr.removeAttribute('aria-activedescendant');
 }
 
 export function selectedUrl() {

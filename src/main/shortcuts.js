@@ -11,6 +11,7 @@ function handlePageKey(tabs, e, input) {
   const active = tabs.active;
 
   if (mod && key === 'l') { tabs.emit('focus-address'); e.preventDefault(); }
+  else if (mod && input.shift && key === 't') { tabs.reopenClosed(); e.preventDefault(); }
   else if (mod && key === 't') { tabs.newTab(); e.preventDefault(); }
   else if (mod && key === 'w') { tabs.closeActive(); e.preventDefault(); }
   else if (mod && key === 'tab') { input.shift ? tabs.prevTab() : tabs.nextTab(); e.preventDefault(); }

@@ -1,5 +1,6 @@
-/* The ⋮ settings menu — a chrome overlay anchored under the menu button. */
-#menu {
+/* The ⋮ settings menu and the tab right-click menu — chrome overlay popovers. */
+#menu,
+.ctx-menu {
   position: absolute;
   z-index: 20;
   min-width: 230px;
@@ -9,6 +10,7 @@
   padding: 6px;
   -webkit-app-region: no-drag;
 }
+.ctx-menu { min-width: 200px; }
 
 .m-row {
   display: flex;
@@ -23,9 +25,12 @@
   cursor: default;
 }
 .m-row:hover { background: rgba(255, 255, 255, 0.06); }
+.m-row:focus { outline: none; background: rgba(255, 255, 255, 0.06); } /* keyboard highlight (DESIGN §6) */
+.m-row.disabled { color: var(--fg-faint); pointer-events: none; }
+.m-row.disabled .m-key { color: var(--fg-faint); }
 .m-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-key { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
-.m-sep { height: 1px; margin: 6px 8px; background: var(--hairline); }
+.m-sep { height: 1px; margin: 4px 8px; background: var(--hairline); }
 
 /* toggle switch */
 .m-switch {

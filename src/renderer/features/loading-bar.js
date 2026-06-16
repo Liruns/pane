@@ -22,11 +22,14 @@ export function initLoadingBar() {
 
   function stop() {
     clearInterval(trickle);
+    // Completion leg eases 80→100% (DESIGN §15: ease-standard over motion-standard),
+    // then fades. Tokens resolve from :root; reduced-motion drops the transition (base.css).
+    bar.style.transition = 'width var(--motion-standard) var(--ease-standard), opacity 0.2s ease';
     bar.style.width = '100%';
     reset = setTimeout(() => {
       bar.style.opacity = '0';
       setTimeout(() => { bar.style.width = '0%'; }, 220);
-    }, 160);
+    }, 300); // hold for the completion leg before fading out
   }
 
   window.pane.onLoading((d) => (d.loading ? start() : stop()));

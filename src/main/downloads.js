@@ -17,6 +17,8 @@ let saveTimer = null;
 
 function loadDone() { if (!done) { const d = readJSON(FILE, []); done = Array.isArray(d) ? d : []; } return done; }
 function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(() => writeJSON(FILE, done), 800); }
+/** Flush a pending debounced save now — call on app quit so a just-finished download isn't lost. */
+function flush() { clearTimeout(saveTimer); if (done) writeJSON(FILE, done); }
 
 /** Avoid clobbering an existing file: name → name (1) → name (2) … */
 function uniquePath(dir, name) {
@@ -109,4 +111,4 @@ function removeEntry(id) {
 
 function clearCompleted() { done = []; writeJSON(FILE, done); changed(); }
 
-module.exports = { init, list, open, showInFolder, cancel, removeEntry, clearCompleted };
+module.exports = { init, list, open, showInFolder, cancel, removeEntry, clearCompleted, flush };

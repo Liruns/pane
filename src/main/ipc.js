@@ -24,6 +24,11 @@ function registerIpc(getWindow) {
   ipcMain.handle(CH.TAB_NEW, () => { const t = tabsOf(); if (t) t.newTab(); });
   ipcMain.handle(CH.TAB_CLOSE, (_e, id) => { const t = tabsOf(); if (t) t.closeTab(id); });
   ipcMain.handle(CH.TAB_ACTIVATE, (_e, id) => { const t = tabsOf(); if (t) t.activate(id); });
+  ipcMain.handle(CH.TAB_MOVE, (_e, id, pos) => { const t = tabsOf(); if (t) t.moveTab(id, pos); });
+  ipcMain.handle(CH.TAB_RELOAD, (_e, id) => { const t = tabsOf(); if (t) t.reloadTab(id); });
+  ipcMain.handle(CH.TAB_DUPLICATE, (_e, id) => { const t = tabsOf(); if (t) t.duplicate(id); });
+  ipcMain.handle(CH.TAB_CLOSE_OTHERS, (_e, id) => { const t = tabsOf(); if (t) t.closeOthers(id); });
+  ipcMain.handle(CH.TAB_REOPEN, () => { const t = tabsOf(); if (t) t.reopenClosed(); });
 
   ipcMain.handle(CH.TOGGLE_MAXIMIZE, () => {
     const w = getWindow();

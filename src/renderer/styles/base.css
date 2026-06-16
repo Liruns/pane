@@ -13,6 +13,27 @@ html, body {
   cursor: default;
 }
 
+/* Popover entrance — DESIGN §15: menus/dropdowns rise with ease-enter on open.
+   An animation (not a transition) so it plays each time the element un-hides
+   (display:none → shown), and never on in-place content updates (replaceChildren
+   keeps the element displayed). The reduced-motion block below swaps it for a
+   plain crossfade — "popovers crossfade instead of rising". */
+@keyframes pane-pop-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes pane-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+#suggestions, #menu, .ctx-menu {
+  animation: pane-pop-in var(--motion-standard) var(--ease-enter);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
+  #suggestions, #menu, .ctx-menu {
+    animation-name: pane-fade-in;
+    animation-duration: var(--motion-fast);
+  }
 }
