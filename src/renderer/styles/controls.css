@@ -31,3 +31,10 @@
   pointer-events: none;
   transition: width 0.15s linear, opacity 0.2s ease;
 }
+
+/* DESIGN §8: at narrow widths the right cluster collapses into the overflow (⋮) menu.
+   The DevTools toggle folds away here and re-appears as a menu item (see menu.js), so the
+   address pill keeps a usable width. */
+@media (max-width: 768px) {
+  #devtools { display: none; }
+}
