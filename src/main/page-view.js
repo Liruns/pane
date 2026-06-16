@@ -44,7 +44,7 @@ class PageView extends EventEmitter {
       this.emit('loading', true);
     });
 
-    wc.on('did-navigate', () => this._emitState());
+    wc.on('did-navigate', (_e, url) => { this.emit('navigated', url); this._emitState(); });
     wc.on('did-navigate-in-page', () => this._emitState());
 
     wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {

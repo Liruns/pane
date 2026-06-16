@@ -1,7 +1,7 @@
-// The omnibox suggestion dropdown (DESIGN §10). The toolbar is a fixed-height
-// WebContentsView, so the dropdown can't overflow it — while it's open we grow the
-// chrome view (window.pane.setChromeHeight) to cover the panel; the chrome is transparent
-// around the panel so the page shows through, and a click there closes it.
+// The omnibox suggestion dropdown (DESIGN §10). History matches (from main) rank on top,
+// then the Go-to / Search actions. The toolbar is a fixed-height WebContentsView, so while
+// the dropdown is open we grow the chrome view (setChromeHeight) to cover the panel; the
+// chrome is transparent around it so the page shows through, and a click there closes it.
 import { $, on } from '../lib/dom.js';
 import { toNavURL } from './url-parser.js';
 
@@ -11,12 +11,14 @@ const ROW_H = 36;
 const ICON = {
   go: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 };
 
 let panel, pill, addr;
 let rows = [];
 let sel = -1;
 let lastW = 0;
+let reqId = 0;
 
 export function initSuggestions() {
   addr = $('#address');
@@ -32,33 +34,43 @@ export function initSuggestions() {
     if (e.target.closest('#suggestions') || e.target.closest('#pill')) return;
     close();
   });
-  // close on a real (width) window resize, but not on our own chrome-height changes
   on(window, 'resize', () => {
     if (window.innerWidth !== lastW) { lastW = window.innerWidth; if (!panel.hidden) close(); }
   });
 }
 
-function hostOf(u) { try { return new URL(u).host || u; } catch { return u; } }
+const hostOf = (u) => { try { return new URL(u).host || u; } catch { return u; } };
+const display = (u) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
 
-function build(input) {
-  const s = input.trim();
-  if (!s) return [];
+function actions(s) {
   const url = toNavURL(s);
   if (!url) return [];
-  const items = [];
   if (url.startsWith(SEARCH)) {
-    items.push({ icon: 'search', label: `Search for “${s}”`, url });
-    if (!/\s/.test(s) && s.includes('.')) items.push({ icon: 'go', label: `Go to ${s}`, url: 'https://' + s });
-  } else {
-    items.push({ icon: 'go', label: `Go to ${hostOf(url)}`, url });
-    items.push({ icon: 'search', label: `Search for “${s}”`, url: SEARCH + encodeURIComponent(s) });
+    const out = [{ icon: 'search', label: `Search for “${s}”`, url }];
+    if (!/\s/.test(s) && s.includes('.')) out.push({ icon: 'go', label: `Go to ${s}`, url: 'https://' + s });
+    return out;
   }
-  return items;
+  return [
+    { icon: 'go', label: `Go to ${hostOf(url)}`, url },
+    { icon: 'search', label: `Search for “${s}”`, url: SEARCH + encodeURIComponent(s) },
+  ];
 }
 
-export function update(input) {
+export async function update(input) {
   if (document.activeElement !== addr) { close(); return; }
-  const items = build(input);
+  const s = input.trim();
+  if (!s) { close(); return; }
+
+  const my = ++reqId;
+  let hist = [];
+  try { hist = await window.pane.queryHistory(s); } catch { hist = []; }
+  if (my !== reqId || document.activeElement !== addr) return; // stale / blurred
+
+  const histItems = hist.map((h) => ({
+    icon: 'history', url: h.url, label: h.title ? `${h.title} — ${display(h.url)}` : display(h.url),
+  }));
+  const seen = new Set(histItems.map((h) => h.url));
+  const items = [...histItems, ...actions(s).filter((a) => !seen.has(a.url))];
   if (!items.length) { close(); return; }
 
   rows = items;

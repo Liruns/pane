@@ -1,11 +1,11 @@
 'use strict';
 const { ipcMain } = require('electron');
 const CH = require('../shared/channels');
+const history = require('./history');
 
 /**
  * Register the toolbar→main handlers once. Page commands route to the active tab;
- * tab commands route to the active window's TabManager. Resolved lazily via
- * getWindow() so the wiring is window/tab-aware.
+ * tab/window commands route to the active window. Resolved lazily via getWindow().
  */
 function registerIpc(getWindow) {
   const tabsOf = () => { const w = getWindow(); return w ? w.tabs : null; };
@@ -22,11 +22,13 @@ function registerIpc(getWindow) {
   ipcMain.handle(CH.TAB_NEW, () => { const t = tabsOf(); if (t) t.newTab(); });
   ipcMain.handle(CH.TAB_CLOSE, (_e, id) => { const t = tabsOf(); if (t) t.closeTab(id); });
   ipcMain.handle(CH.TAB_ACTIVATE, (_e, id) => { const t = tabsOf(); if (t) t.activate(id); });
+
   ipcMain.handle(CH.TOGGLE_MAXIMIZE, () => {
     const w = getWindow();
     if (w) { w.win.isMaximized() ? w.win.unmaximize() : w.win.maximize(); }
   });
   ipcMain.handle(CH.SET_CHROME_HEIGHT, (_e, h) => { const w = getWindow(); if (w) w.setChromeHeight(h); });
+  ipcMain.handle(CH.HISTORY_QUERY, (_e, input) => history.query(input));
 }
 
 module.exports = { registerIpc };

@@ -2,6 +2,7 @@
 const { EventEmitter } = require('node:events');
 const PageView = require('./page-view');
 const { handlePageKey } = require('./shortcuts');
+const history = require('./history');
 
 /**
  * Owns the set of tabs (one PageView each) and which is active. Only the active
@@ -40,7 +41,12 @@ class TabManager extends EventEmitter {
     const tab = { id, view, title: 'New Tab', url: '', loading: false, favicon: '' };
     this.tabs.push(tab);
 
-    view.on('title', (title) => { tab.title = title || 'New Tab'; this._emitTabs(); });
+    view.on('title', (title) => {
+      tab.title = title || 'New Tab';
+      history.updateTitle(tab.url, title);
+      this._emitTabs();
+    });
+    view.on('navigated', (navUrl) => history.record(navUrl));
     view.on('favicon', (f) => { tab.favicon = f; this._emitTabs(); });
     view.on('loading', (loading) => {
       tab.loading = loading;
