@@ -61,12 +61,13 @@ function init() {
       meta.totalBytes = item.getTotalBytes();
       meta.paused = item.isPaused();
       meta.state = state === 'interrupted' ? 'interrupted' : 'progressing';
-      changed();
+      changedThrottled(); // many ticks/sec — coalesce so the page doesn't rebuild on every byte
     });
     item.once('done', (_ev, state) => {
+      active.delete(id);
+      if (meta.removed) { changed(); return; } // user removed it mid-flight — don't resurrect the row
       meta.receivedBytes = item.getReceivedBytes();
       meta.state = state; // 'completed' | 'cancelled' | 'interrupted'
-      active.delete(id);
       done.unshift(meta);
       if (done.length > MAX) done.length = MAX;
       scheduleSave();
@@ -81,6 +82,15 @@ function changed() {
   for (const wc of webContents.getAllWebContents()) {
     try { if (wc.getURL().startsWith('pane://downloads')) wc.send('pane-internal:downloads-changed'); } catch { /* gone */ }
   }
+}
+
+// Leading-edge throttle for progress ticks: refresh now, then at most once per 250ms. The
+// immediate 'done'/'will-download' pushes call changed() directly so final state is never delayed.
+let changeTimer = null;
+function changedThrottled() {
+  if (changeTimer) return;
+  changed();
+  changeTimer = setTimeout(() => { changeTimer = null; }, 250);
 }
 
 function list() {
@@ -102,7 +112,7 @@ function cancel(id) { const a = active.get(id); if (a) a.item.cancel(); }
 /** Remove from the list (cancels if in-flight). Does not delete the file on disk. */
 function removeEntry(id) {
   const a = active.get(id);
-  if (a) { try { a.item.cancel(); } catch { /* gone */ } active.delete(id); }
+  if (a) { a.meta.removed = true; try { a.item.cancel(); } catch { /* gone */ } active.delete(id); }
   loadDone();
   const i = done.findIndex((m) => m.id === id);
   if (i !== -1) { done.splice(i, 1); scheduleSave(); }

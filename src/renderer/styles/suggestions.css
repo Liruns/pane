@@ -21,6 +21,7 @@
   overflow: hidden;
 }
 .sg-row.selected { background: rgba(255, 255, 255, 0.06); color: var(--fg); }
+.sg-match { color: var(--fg); } /* DESIGN §4: the matched substring is foreground, the rest muted */
 .sg-row.selected .sg-icon { color: var(--accent-dark); }
 
 .sg-icon { flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--fg-faint); }

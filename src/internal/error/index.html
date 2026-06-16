@@ -30,6 +30,8 @@
     button { font: inherit; font-size: 13px; cursor: default; border: 0; border-radius: 980px; padding: 8px 16px; transition: filter 0.15s ease; }
     .retry { background: var(--accent); color: #fff; }
     .search { background: transparent; color: var(--fg); border: 1px solid var(--hair); }
+    /* DESIGN §14: cert "proceed" is deliberately un-styled (not blue) — a quiet, plain link. */
+    .proceed { background: transparent; color: var(--muted); border: 0; border-radius: 0; padding: 8px 8px; text-decoration: underline; }
     button:hover { filter: brightness(1.08); }
     button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   </style>
@@ -42,6 +44,7 @@
     <div class="actions">
       <button class="retry" id="retry">Retry</button>
       <button class="search" id="search">Search instead</button>
+      <button class="proceed" id="proceed" hidden>Proceed anyway</button>
     </div>
   </div>
   <script src="error.js"></script>

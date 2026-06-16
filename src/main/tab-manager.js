@@ -47,10 +47,10 @@ class TabManager extends EventEmitter {
 
     view.on('title', (title) => {
       tab.title = title || 'New Tab';
-      history.updateTitle(tab.url, title);
+      history.updateTitle(tab._recordedUrl || tab.url, title); // key on the URL actually recorded (tab.url lags behind page-title-updated)
       this._emitTabs();
     });
-    view.on('navigated', (navUrl) => history.record(navUrl));
+    view.on('navigated', (navUrl) => { tab._recordedUrl = navUrl; history.record(navUrl); });
     view.on('favicon', (f) => { tab.favicon = f; this._emitTabs(); });
     view.on('found', (r) => { if (id === this.activeId) this.emit('found', r); });
     view.on('loading', (loading) => {
@@ -64,6 +64,7 @@ class TabManager extends EventEmitter {
       if (id === this.activeId) this.emit('nav-state', state);
     });
     view.on('load-error', (err) => { if (id === this.activeId) this.emit('load-error', err); });
+    view.on('devtools', (open) => { if (id === this.activeId) this.emit('devtools', open); });
     view.on('open-external', (u) => this.emit('open-external', u));
     view.webContents.on('before-input-event', (e, input) => handlePageKey(this, e, input));
 
@@ -78,14 +79,16 @@ class TabManager extends EventEmitter {
     const view = this.active;
     this.emit('active-page', view);
     this._emitTabs();
-    if (view) view.refreshState();
+    // Re-sync the toolbar's per-active signals (loading bar, Reload/Stop glyph, devtools icon) —
+    // refreshState() only re-emits nav-state, so without these a tab switch leaves them stale.
+    if (view) { view.refreshState(); this.emit('loading', view.isLoading()); this.emit('devtools', view.isDevToolsOpen()); }
   }
 
   /** Re-emit the current state — used after the toolbar renderer (re)loads. */
   refresh() {
     this._emitTabs();
     const view = this.active;
-    if (view) view.refreshState();
+    if (view) { view.refreshState(); this.emit('loading', view.isLoading()); this.emit('devtools', view.isDevToolsOpen()); }
   }
 
   nextTab() { this._cycle(1); }
@@ -155,8 +158,9 @@ class TabManager extends EventEmitter {
   duplicate(id) {
     const idx = this.tabs.findIndex((t) => t.id === id);
     if (idx === -1) return;
-    const url = this.tabs[idx].view.webContents.getURL();
-    this.newTab(url || undefined, idx + 1);
+    const real = this.tabs[idx].view.webContents.getURL();
+    const url = real && !real.startsWith('pane://') ? real : undefined; // internal pages → fresh start page, not a raw pane:// reload
+    this.newTab(url, idx + 1);
   }
 
   /** Close every tab except `id`. */

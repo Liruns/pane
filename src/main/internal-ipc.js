@@ -6,6 +6,7 @@ const history = require('./history');
 const settings = require('./settings');
 const bookmarks = require('./bookmarks');
 const downloads = require('./downloads');
+const session = require('./session');
 
 const fromInternal = (event) => {
   try { return new URL(event.senderFrame.url).protocol === 'pane:'; } catch { return false; }
@@ -25,7 +26,12 @@ function registerInternalIpc(getWindow) {
   ipcMain.handle('pane-internal:history-clear', (e) => { if (fromInternal(e)) history.clear(); });
 
   ipcMain.handle('pane-internal:settings-get', (e) => (fromInternal(e) ? settings.getAll() : {}));
-  ipcMain.handle('pane-internal:settings-set', (e, key, value) => { if (fromInternal(e)) settings.set(key, value); });
+  ipcMain.handle('pane-internal:settings-set', (e, key, value) => {
+    if (!fromInternal(e)) return;
+    settings.set(key, value);
+    // Privacy: turning off session restore drops the stored snapshot (mirrors the toolbar path in ipc.js).
+    if (key === 'restoreSession' && !value) session.clear();
+  });
 
   ipcMain.handle('pane-internal:bookmarks-list', (e, opts) => (fromInternal(e) ? bookmarks.list(opts) : []));
   ipcMain.handle('pane-internal:bookmarks-remove', (e, url) => { if (fromInternal(e)) bookmarks.remove(url); });
@@ -36,6 +42,9 @@ function registerInternalIpc(getWindow) {
   ipcMain.handle('pane-internal:downloads-cancel', (e, id) => { if (fromInternal(e)) downloads.cancel(id); });
   ipcMain.handle('pane-internal:downloads-remove', (e, id) => { if (fromInternal(e)) downloads.removeEntry(id); });
   ipcMain.handle('pane-internal:downloads-clear', (e) => { if (fromInternal(e)) downloads.clearCompleted(); });
+
+  // "Proceed anyway" from the cert error page: trust this host for the active tab, then it reloads.
+  ipcMain.handle('pane-internal:cert-allow', (e, host) => { if (fromInternal(e)) { const p = active(); if (p) p.allowCert(host); } });
 }
 
 module.exports = { registerInternalIpc, fromInternal };

@@ -13,10 +13,10 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 1;
+  flex: 0 1 auto; /* size to the tabs so #newtab sits right after the last tab, not pushed to the far edge */
   min-width: 0;
   overflow: hidden;
-  /* draggable: empty space here moves the window; only the tabs themselves are no-drag */
+  /* the leftover tabstrip space after #newtab stays draggable (it's the #tabstrip drag region) */
 }
 
 .tab {

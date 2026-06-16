@@ -16,7 +16,9 @@ const MIME = {
 /** Call before app 'ready'. */
 function registerScheme() {
   protocol.registerSchemesAsPrivileged([
-    { scheme: 'pane', privileges: { standard: true, secure: true, supportFetchAPI: true } },
+    // corsEnabled: a custom standard scheme blocks cross-origin fetches at the scheme level
+    // (Chromium) unless this is set — needed so pane://<page> can load pane://assets/* (the font).
+    { scheme: 'pane', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
   ]);
 }
 
@@ -25,13 +27,20 @@ function handle() {
   protocol.handle('pane', (request) => {
     const url = new URL(request.url);
     const root = url.hostname === 'assets' ? ASSETS : path.join(INTERNAL, url.hostname);
-    let rel = decodeURIComponent(url.pathname);
+    let rel;
+    try { rel = decodeURIComponent(url.pathname); }
+    catch { return new Response('Bad request', { status: 400 }); } // malformed %-escape must not throw
     if (rel === '/' || rel === '') rel = '/index.html';
     const filePath = path.normalize(path.join(root, rel));
     if (!filePath.startsWith(path.normalize(root))) return new Response('Forbidden', { status: 403 });
     try {
       const data = fs.readFileSync(filePath);
-      return new Response(data, { headers: { 'content-type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream' } });
+      return new Response(data, { headers: {
+        'content-type': MIME[path.extname(filePath).toLowerCase()] || 'application/octet-stream',
+        // pane://<page> fetching pane://assets/* (e.g. the bundled Inter font) is cross-origin under
+        // the standard scheme; without this the font fetch is CORS-blocked and silently falls back.
+        'access-control-allow-origin': '*',
+      } });
     } catch {
       return new Response('Not found', { status: 404 });
     }

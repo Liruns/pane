@@ -30,6 +30,7 @@ module.exports = {
   // main → renderer (send)
   NAV_STATE: 'pane:nav-state',
   LOADING: 'pane:loading',
+  DEVTOOLS_STATE: 'pane:devtools-state',
   LOAD_ERROR: 'pane:load-error',
   FOCUS_ADDRESS: 'pane:focus-address',
   TABS_STATE: 'pane:tabs-state',

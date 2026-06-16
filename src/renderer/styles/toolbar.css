@@ -22,7 +22,7 @@
 .address-wrap {
   flex: 1;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start; /* DESIGN §4: left-anchored after the nav cluster, fills to the right cap */
   min-width: 0;
   /* draggable: empty space around the pill moves the window; the pill itself is no-drag */
 }

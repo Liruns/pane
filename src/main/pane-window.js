@@ -1,5 +1,5 @@
 'use strict';
-const { BaseWindow, shell } = require('electron');
+const { BaseWindow, shell, screen } = require('electron');
 const { TABSTRIP_HEIGHT, CHROME_HEIGHT, WINDOW, COLORS } = require('../shared/config');
 const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
@@ -8,6 +8,22 @@ const { handlePageKey } = require('./shortcuts');
 const settings = require('./settings');
 const session = require('./session');
 
+/** Clamp saved window bounds onto a currently-connected display so a window restored from a
+ *  now-disconnected monitor (or a changed layout) can't open fully off-screen. */
+function clampToDisplay(b) {
+  if (!b) return null;
+  try {
+    const area = screen.getDisplayMatching({
+      x: b.x | 0, y: b.y | 0, width: b.width || WINDOW.width, height: b.height || WINDOW.height,
+    }).workArea;
+    const width = Math.min(b.width || WINDOW.width, area.width);
+    const height = Math.min(b.height || WINDOW.height, area.height);
+    const x = Math.min(Math.max(b.x ?? area.x, area.x), area.x + area.width - width);
+    const y = Math.min(Math.max(b.y ?? area.y, area.y), area.y + area.height - height);
+    return { x, y, width, height };
+  } catch { return null; }
+}
+
 /**
  * One browser window: a BaseWindow hosting the toolbar (ChromeView) over the active
  * tab's page. Owns layout/resize, swaps the visible page on tab change, bridges
@@ -15,7 +31,7 @@ const session = require('./session');
  */
 class PaneWindow {
   constructor(restore = null) {
-    const b = (restore && restore.bounds) || null;
+    const b = clampToDisplay((restore && restore.bounds) || null);
     this.win = new BaseWindow({
       width: (b && b.width) || WINDOW.width,
       height: (b && b.height) || WINDOW.height,
@@ -35,6 +51,7 @@ class PaneWindow {
     this.tabs = new TabManager();
     this._activeView = null;
     this._lastBounds = null;
+    this._chromeHeight = CHROME_HEIGHT; // grows while an overlay is open; layout() honors it
 
     this.win.contentView.addChildView(this.chrome.view);
     this._connect();
@@ -44,9 +61,11 @@ class PaneWindow {
     this.chrome.webContents.on('before-input-event', (e, input) => handlePageKey(this.tabs, e, input));
 
     this._restoreTabs(restore);
+    if (restore && restore.maximized) this.win.maximize();
 
     // DESIGN §5: reposition synchronously on resize (don't gate behind renderer rAF).
-    this.win.on('will-resize', () => this.layout());
+    // 'will-resize' carries the size the window is BECOMING — lay out to that, not the stale current size.
+    this.win.on('will-resize', (_e, bounds) => this.layout(bounds));
     this.win.on('resize', () => this.layout());
     this.win.on('resized', () => { this.layout(); this._saveSession(); });
     this.win.on('moved', () => this._saveSession());
@@ -71,7 +90,9 @@ class PaneWindow {
     return {
       tabs: tabs.map((t) => (/^https?:\/\//i.test(t.url) ? t.url : '')),
       activeIndex: Math.max(0, tabs.findIndex((t) => t.id === this.tabs.activeId)),
-      bounds: this.win.getBounds(),
+      // When maximized, persist the NORMAL bounds so un-maximize after restore returns a sane size.
+      bounds: this.win.isMaximized() ? this.win.getNormalBounds() : this.win.getBounds(),
+      maximized: this.win.isMaximized(),
     };
   }
 
@@ -80,13 +101,15 @@ class PaneWindow {
     session.save(this.serialize());
   }
 
-  layout() {
+  layout(targetBounds) {
     if (this.win.isDestroyed()) return; // a resize event can still fire mid-teardown
-    const { width, height } = this.win.getContentBounds();
+    // Prefer the target size from 'will-resize' (the size the window is becoming) over the stale
+    // current content bounds, so the native view tracks the drag without a one-frame lag (DESIGN §5).
+    const { width, height } = targetBounds || this.win.getContentBounds();
     if (this._lastBounds && this._lastBounds.width === width && this._lastBounds.height === height) return;
     this._lastBounds = { width, height };
 
-    this.chrome.view.setBounds({ x: 0, y: 0, width, height: CHROME_HEIGHT });
+    this.chrome.view.setBounds({ x: 0, y: 0, width, height: this._chromeHeight });
     if (this._activeView) {
       const top = CHROME_HEIGHT - 1; // 1px overlap hides the seam (DESIGN §5)
       this._activeView.view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) });
@@ -97,8 +120,9 @@ class PaneWindow {
    *  transparent below the toolbar, so the page shows through around the panel. */
   setChromeHeight(h) {
     if (this.win.isDestroyed()) return;
+    this._chromeHeight = Math.max(CHROME_HEIGHT, Math.round(h)); // remember so a resize won't collapse an open overlay
     const { width } = this.win.getContentBounds();
-    this.chrome.view.setBounds({ x: 0, y: 0, width, height: Math.max(CHROME_HEIGHT, Math.round(h)) });
+    this.chrome.view.setBounds({ x: 0, y: 0, width, height: this._chromeHeight });
   }
 
   _setActiveView(view) {
@@ -120,6 +144,7 @@ class PaneWindow {
     tabs.on('active-page', (view) => this._setActiveView(view));
     tabs.on('all-closed', () => this.win.close());
     tabs.on('loading', (loading) => chrome.send(CH.LOADING, { loading }));
+    tabs.on('devtools', (open) => chrome.send(CH.DEVTOOLS_STATE, { open }));
     tabs.on('nav-state', (state) => chrome.send(CH.NAV_STATE, state));
     tabs.on('load-error', (err) => chrome.send(CH.LOAD_ERROR, err));
     tabs.on('focus-address', () => chrome.send(CH.FOCUS_ADDRESS));

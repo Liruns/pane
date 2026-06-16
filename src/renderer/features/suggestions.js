@@ -5,6 +5,7 @@ import { $, on } from '../lib/dom.js';
 import { toNavURL, search, SEARCH_BASE } from './url-parser.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
 import { ICONS } from '../lib/icons.js';
+import { TLDS } from '../lib/tlds.js';
 
 const ROW_H = 36;
 
@@ -46,15 +47,30 @@ export function initSuggestions() {
 const hostOf = (u) => { try { return new URL(u).host || u; } catch { return u; } };
 const display = (u) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
 
+// Fill a row label, emphasizing the matched query substring (DESIGN §4). Built from text nodes,
+// never innerHTML, so history titles/URLs can never inject markup into the privileged chrome.
+function fillLabel(el, label, query) {
+  el.textContent = '';
+  const q = (query || '').trim();
+  const i = q ? label.toLowerCase().indexOf(q.toLowerCase()) : -1;
+  if (i === -1) { el.textContent = label; return; }
+  const match = document.createElement('span');
+  match.className = 'sg-match';
+  match.textContent = label.slice(i, i + q.length);
+  el.append(document.createTextNode(label.slice(0, i)), match, document.createTextNode(label.slice(i + q.length)));
+}
+
 function actions(s) {
   const url = toNavURL(s);
   if (!url) return [];
   if (url.startsWith(SEARCH_BASE)) {
     const se = { icon: 'search', label: `Search for “${s}”`, url };
-    // Plausibly a host (no spaces, dotted, parseable)? Surface "Go to" as #1 — search stays the
-    // default action (nothing is pre-selected), but the host is one keystroke away. DESIGN §10.5/6.
+    // Plausibly a host? Surface "Go to" as #1 — but only when the final label is a real TLD, so
+    // decimals/filenames (1.5, file.txt) don't get a misleading Go-to. Search stays the default
+    // (nothing pre-selected); the host is one keystroke away. DESIGN §10.4/§12 (a URL never lies).
     if (!/\s/.test(s) && s.includes('.') && URL.canParse('https://' + s)) {
-      return [{ icon: 'go', label: `Go to ${s}`, url: 'https://' + s }, se];
+      const tld = new URL('https://' + s).hostname.split('.').pop() || '';
+      if (TLDS.has(tld)) return [{ icon: 'go', label: `Go to ${s}`, url: 'https://' + s }, se];
     }
     return [se];
   }
@@ -65,11 +81,11 @@ function actions(s) {
 }
 
 export async function update(input) {
+  const my = ++reqId; // bump first so empty/blur early-returns also invalidate any in-flight query
   if (document.activeElement !== addr) { close(); return; }
   const s = input.trim();
   if (!s) { close(); return; }
 
-  const my = ++reqId;
   let hist = [];
   try { hist = await window.pane.queryHistory(s); } catch { hist = []; }
   if (my !== reqId || document.activeElement !== addr) return; // stale / blurred
@@ -90,7 +106,7 @@ export async function update(input) {
     row.setAttribute('role', 'option');
     row.id = `sg-row-${i}`;
     row.innerHTML = `<span class="sg-icon">${ICON[it.icon]}</span><span class="sg-label"></span>`;
-    row.querySelector('.sg-label').textContent = it.label;
+    fillLabel(row.querySelector('.sg-label'), it.label, s); // DESIGN §4: matched substring → foreground
     on(row, 'mousedown', (e) => { e.preventDefault(); commit(it.url); });
     on(row, 'mousemove', () => highlight(i));
     panel.append(row);
@@ -119,7 +135,9 @@ export function isOpen() { return !panel.hidden; }
 
 export function move(dir) {
   if (panel.hidden || !rows.length) return;
-  highlight((sel + dir + rows.length) % rows.length);
+  // From no selection: ArrowDown → first, ArrowUp → last (conventional combobox behavior).
+  const next = sel < 0 ? (dir > 0 ? 0 : rows.length - 1) : (sel + dir + rows.length) % rows.length;
+  highlight(next);
 }
 
 function highlight(i) {

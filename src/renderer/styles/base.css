@@ -1,6 +1,10 @@
 /* Reset + window-level defaults for the toolbar document. */
 * { box-sizing: border-box; }
 
+/* The `hidden` attribute must always win, even over an id rule that sets `display`
+   (e.g. #findbar). Without this, a hidden overlay that declares its own display stays visible. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   height: 100%;

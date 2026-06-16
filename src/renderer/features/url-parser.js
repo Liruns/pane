@@ -63,9 +63,9 @@ export function toNavURL(raw) {
   if (!/\s/.test(s) && host.includes('.')) {
     // "looks-like-a-package" tokens resolve to search, never auto-load.
     if (PACKAGE_DENYLIST.has(host.toLowerCase())) return search(s);
-    if (URL.canParse('https://' + s)) {
-      const tld = new URL('https://' + s).hostname.split('.').pop() || ''; // IDN → punycode
-      if (TLDS.has(tld)) return 'https://' + s;
+    if (URL.canParse(proto + s)) {
+      const tld = new URL(proto + s).hostname.split('.').pop() || ''; // IDN → punycode
+      if (TLDS.has(tld)) return proto + s; // honor :443⇒https, else http (dev servers) — DESIGN §10.3
     }
   }
 
