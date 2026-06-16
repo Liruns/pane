@@ -38,6 +38,10 @@ class PaneWindow {
     this.win.on('will-resize', () => this.layout());
     this.win.on('resize', () => this.layout());
     this.win.on('resized', () => this.layout());
+
+    // Re-push current state once the toolbar renderer is ready — the initial
+    // tab/nav events fire before the renderer has registered its listeners.
+    this.chrome.webContents.once('did-finish-load', () => this.tabs.refresh());
   }
 
   layout() {

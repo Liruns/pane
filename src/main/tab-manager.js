@@ -71,6 +71,13 @@ class TabManager extends EventEmitter {
     if (view) view.refreshState(); // push the active tab's nav state to the toolbar
   }
 
+  /** Re-emit the current state — used after the toolbar renderer (re)loads. */
+  refresh() {
+    this._emitTabs();
+    const view = this.active;
+    if (view) view.refreshState();
+  }
+
   closeActive() { if (this.activeId != null) this.closeTab(this.activeId); }
 
   closeTab(id) {

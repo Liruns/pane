@@ -13,6 +13,10 @@ class ChromeView {
         preload: path.join(__dirname, '..', 'preload', 'index.js'),
         contextIsolation: true,
         nodeIntegration: false,
+        // The chrome is fully-trusted local UI. Disabling the sandbox lets the
+        // preload `require('../shared/channels')`; a sandboxed preload can only
+        // require Electron/Node built-ins. The page view stays sandboxed.
+        sandbox: false,
       },
     });
     this.view.setBackgroundColor('#00000000');
