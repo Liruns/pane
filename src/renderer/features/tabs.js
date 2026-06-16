@@ -1,16 +1,24 @@
-// The tab strip: renders the tab list from main, routes clicks back as tab actions.
-// (Keyboard shortcuts — Ctrl+T/W/Tab — are handled in the main process via
-// before-input-event so their preventDefault reliably stops focus traversal.)
+// The tab strip: renders the tab list from main, routes clicks/drags/right-clicks back as
+// tab actions. (Keyboard shortcuts — Ctrl+T/W/Tab, Ctrl+Shift+T — are handled in the main
+// process via before-input-event so their preventDefault reliably stops focus traversal.)
 import { $, on } from '../lib/dom.js';
 import { ICONS } from '../lib/icons.js';
+import { openOverlay, closeOverlay } from '../lib/overlay.js';
 
 // Only let web favicons into the privileged chrome document (no file:/pane:/js: schemes).
 const SAFE_FAVICON = /^(?:https?|data):/i;
 
+let state = { tabs: [], activeId: null, canReopen: false };
+let dragId = null;
+let ctx; // the right-click context-menu panel
+
 export function initTabs() {
   const list = $('#tabs');
   on($('#newtab'), 'click', () => window.pane.newTab());
-  window.pane.onTabs((s) => render(list, s));
+  window.pane.onTabs((s) => { state = s; render(list, s); });
+
+  initDrag(list);
+  initContextMenu(list);
 }
 
 function faviconEl(tab) {
@@ -33,6 +41,8 @@ function render(list, s) {
     const tab = document.createElement('div');
     tab.className = 'tab' + (t.id === s.activeId ? ' active' : '') + (t.loading ? ' loading' : '');
     tab.title = t.url || t.title || '';
+    tab.draggable = true;
+    tab.dataset.id = t.id;
 
     const title = document.createElement('span');
     title.className = 'title';
@@ -48,4 +58,110 @@ function render(list, s) {
     on(close, 'click', (e) => { e.stopPropagation(); window.pane.closeTab(t.id); });
     list.append(tab);
   }
+}
+
+/* ── Drag to reorder ────────────────────────────────────────────────────────
+   Delegated on the list so handlers survive every re-render. `pos` is the slot
+   in the *current* list before which to drop; main reconciles it. */
+function initDrag(list) {
+  on(list, 'dragstart', (e) => {
+    const el = e.target.closest('.tab');
+    if (!el) return;
+    dragId = Number(el.dataset.id);
+    e.dataTransfer.effectAllowed = 'move';
+    el.classList.add('dragging');
+  });
+  on(list, 'dragover', (e) => {
+    if (dragId == null) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    mark(list, e);
+  });
+  on(list, 'drop', (e) => {
+    if (dragId == null) return;
+    e.preventDefault();
+    window.pane.moveTab(dragId, dropPos(list, e));
+    endDrag(list);
+  });
+  on(list, 'dragend', () => endDrag(list));
+}
+
+function dropPos(list, e) {
+  const els = [...list.querySelectorAll('.tab')];
+  const target = e.target.closest('.tab');
+  if (!target) return els.length; // dropped past the last tab → append
+  const j = els.indexOf(target);
+  const r = target.getBoundingClientRect();
+  return e.clientX > r.left + r.width / 2 ? j + 1 : j;
+}
+
+function mark(list, e) {
+  clearMarks(list);
+  const target = e.target.closest('.tab');
+  if (!target) return;
+  const r = target.getBoundingClientRect();
+  target.classList.add(e.clientX > r.left + r.width / 2 ? 'drop-after' : 'drop-before');
+}
+
+function clearMarks(list) {
+  for (const el of list.querySelectorAll('.drop-before, .drop-after, .dragging')) {
+    el.classList.remove('drop-before', 'drop-after', 'dragging');
+  }
+}
+
+function endDrag(list) { clearMarks(list); dragId = null; }
+
+/* ── Right-click context menu ────────────────────────────────────────────── */
+function initContextMenu(list) {
+  ctx = document.createElement('div');
+  ctx.className = 'ctx-menu';
+  ctx.hidden = true;
+  document.body.append(ctx);
+
+  on(list, 'contextmenu', (e) => {
+    const el = e.target.closest('.tab');
+    if (!el) return;
+    e.preventDefault();
+    openContextMenu(Number(el.dataset.id), e.clientX, e.clientY);
+  });
+  on(window, 'mousedown', (e) => { if (!ctx.hidden && !e.target.closest('.ctx-menu')) closeContextMenu(); });
+  on(window, 'keydown', (e) => { if (e.key === 'Escape' && !ctx.hidden) closeContextMenu(); });
+}
+
+function openContextMenu(id, x, y) {
+  ctx.replaceChildren();
+  const only = state.tabs.length <= 1;
+  ctxItem('Reload', '', () => window.pane.reloadTab(id));
+  ctxItem('Duplicate', '', () => window.pane.duplicateTab(id));
+  ctxSep();
+  ctxItem('Close tab', 'Ctrl+W', () => window.pane.closeTab(id));
+  ctxItem('Close other tabs', '', () => window.pane.closeOtherTabs(id), only);
+  ctxSep();
+  ctxItem('Reopen closed tab', 'Ctrl+Shift+T', () => window.pane.reopenClosedTab(), !state.canReopen);
+
+  ctx.hidden = false;
+  const r = ctx.getBoundingClientRect();
+  ctx.style.left = `${Math.max(8, Math.min(x, window.innerWidth - r.width - 8))}px`;
+  ctx.style.top = `${y}px`;
+  openOverlay(closeContextMenu, Math.ceil(ctx.getBoundingClientRect().bottom + 8));
+}
+
+function closeContextMenu() {
+  if (ctx.hidden) return;
+  ctx.hidden = true;
+  closeOverlay(closeContextMenu);
+}
+
+function ctxItem(label, hint, action, disabled = false) {
+  const row = document.createElement('div');
+  row.className = 'm-row' + (disabled ? ' disabled' : '');
+  row.innerHTML = `<span class="m-label">${label}</span>` + (hint ? `<span class="m-key">${hint}</span>` : '');
+  if (!disabled) on(row, 'click', () => { action(); closeContextMenu(); });
+  ctx.append(row);
+}
+
+function ctxSep() {
+  const s = document.createElement('div');
+  s.className = 'm-sep';
+  ctx.append(s);
 }

@@ -39,6 +39,11 @@
 .tab:hover { background: rgba(255, 255, 255, 0.05); }
 .tab.active { background: var(--surface-1); color: var(--fg); }
 
+/* drag-to-reorder: the dragged tab dims; a 2px accent bar marks the drop slot */
+.tab.dragging { opacity: 0.4; }
+.tab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.tab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
+
 .tab .favicon { flex: none; width: 16px; height: 16px; display: grid; place-items: center; color: var(--fg-faint); }
 .tab .favicon img { width: 16px; height: 16px; }
 .tab .favicon svg { width: 14px; height: 14px; }

@@ -73,7 +73,9 @@ src/
 
 A focused daily driver — everything below is hand-built chrome, no accounts, no fork:
 
-- **Tabs** — `TabManager`, favicons, `Ctrl+Tab` cycling, double-click-to-maximize.
+- **Tabs** — `TabManager`, favicons, `Ctrl+Tab` cycling, double-click-to-maximize,
+  **drag-to-reorder**, a **right-click menu** (reload / duplicate / close / close others),
+  and **reopen-closed** (`Ctrl+Shift+T`).
 - **Smart address bar** — scheme / `localhost` / IPv4 / IPv6 / IDN / Windows-path → load, else
   search; with a Go-to / Search **suggestion dropdown** and **history autocomplete**.
 - **Navigation** — back / forward / reload↔stop, a trickle **loading bar** that aborts on failure.
@@ -94,7 +96,7 @@ A focused daily driver — everything below is hand-built chrome, no accounts, n
 | `Ctrl+L` Focus address | `Ctrl+T` New tab | `Ctrl+W` Close tab | `Ctrl+Tab` Cycle tabs |
 | `Ctrl+R` Reload | `Ctrl+F` Find | `Ctrl+=`/`-`/`0` Zoom | `Alt+←`/`→` Back/Forward |
 | `Ctrl+D` Bookmark | `Ctrl+H` History | `Ctrl+J` Downloads | `Ctrl+,` Settings |
-| `Ctrl+Shift+I` DevTools | | | |
+| `Ctrl+Shift+I` DevTools | `Ctrl+Shift+T` Reopen tab | | |
 
 ## Known constraints (deferred)
 

@@ -18,6 +18,7 @@ class TabManager extends EventEmitter {
     this.tabs = [];
     this.activeId = null;
     this._seq = 0;
+    this._closed = []; // recently-closed snapshots ({ url, index }) for Ctrl+Shift+T
   }
 
   get active() {
@@ -28,6 +29,7 @@ class TabManager extends EventEmitter {
   _state() {
     return {
       activeId: this.activeId,
+      canReopen: this._closed.length > 0,
       tabs: this.tabs.map((t) => ({
         id: t.id, title: t.title, url: t.url, loading: t.loading, favicon: t.favicon,
       })),
@@ -35,11 +37,13 @@ class TabManager extends EventEmitter {
   }
   _emitTabs() { this.emit('tabs', this._state()); }
 
-  newTab(url) {
+  /** Open a tab. `index` (optional) inserts it at that slot; default appends to the end. */
+  newTab(url, index) {
     const id = ++this._seq;
     const view = new PageView();
     const tab = { id, view, title: 'New Tab', url: '', loading: false, favicon: '' };
-    this.tabs.push(tab);
+    const at = Number.isInteger(index) ? Math.max(0, Math.min(index, this.tabs.length)) : this.tabs.length;
+    this.tabs.splice(at, 0, tab);
 
     view.on('title', (title) => {
       tab.title = title || 'New Tab';
@@ -100,6 +104,12 @@ class TabManager extends EventEmitter {
     if (idx === -1) return;
     const tab = this.tabs[idx];
     const wasActive = this.activeId === id;
+    // Remember it so Ctrl+Shift+T can bring it back. Internal pages (new-tab, history, …)
+    // report an empty url, so this naturally skips them — only real pages are restorable.
+    if (tab.url) {
+      this._closed.push({ url: tab.url, index: idx });
+      if (this._closed.length > 25) this._closed.shift();
+    }
     this.tabs.splice(idx, 1);
 
     if (this.tabs.length === 0) {
@@ -114,6 +124,44 @@ class TabManager extends EventEmitter {
       this._emitTabs();
     }
     tab.view.destroy();
+  }
+
+  /** Re-open the most recently closed tab at its old slot (Ctrl+Shift+T). */
+  reopenClosed() {
+    const snap = this._closed.pop();
+    if (snap) this.newTab(snap.url, snap.index);
+  }
+
+  /** Reorder: move `id` so it sits at `pos` in the current list (0 = first). */
+  moveTab(id, pos) {
+    const from = this.tabs.findIndex((t) => t.id === id);
+    if (from === -1) return;
+    const [tab] = this.tabs.splice(from, 1);
+    // `pos` is measured against the list *including* the dragged tab; after removing it,
+    // every slot past `from` shifts down by one.
+    let to = pos > from ? pos - 1 : pos;
+    to = Math.max(0, Math.min(to, this.tabs.length));
+    if (to === from) { this.tabs.splice(from, 0, tab); return; }
+    this.tabs.splice(to, 0, tab);
+    this._emitTabs();
+  }
+
+  reloadTab(id) {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (tab) tab.view.reload();
+  }
+
+  /** Open a copy of the tab's current page right after it. */
+  duplicate(id) {
+    const idx = this.tabs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    const url = this.tabs[idx].view.webContents.getURL();
+    this.newTab(url || undefined, idx + 1);
+  }
+
+  /** Close every tab except `id`. */
+  closeOthers(id) {
+    for (const t of this.tabs.slice()) if (t.id !== id) this.closeTab(t.id);
   }
 }
 
