@@ -24,6 +24,8 @@
 }
 .m-row:hover { background: rgba(255, 255, 255, 0.06); }
 .m-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-key { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
+.m-sep { height: 1px; margin: 6px 8px; background: var(--hairline); }
 
 /* toggle switch */
 .m-switch {

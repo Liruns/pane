@@ -14,6 +14,7 @@ function handlePageKey(tabs, e, input) {
   else if (mod && key === 'tab') { input.shift ? tabs.prevTab() : tabs.nextTab(); e.preventDefault(); }
   else if (mod && key === 'r') { if (active) active.reload(); }
   else if (mod && key === 'f') { tabs.emit('open-find'); e.preventDefault(); }
+  else if (mod && key === 'h') { if (active) active.navigate('pane://history/'); e.preventDefault(); }
   else if (mod && (input.key === '=' || input.key === '+')) { if (active) active.zoomBy(0.5); e.preventDefault(); }
   else if (mod && input.key === '-') { if (active) active.zoomBy(-0.5); e.preventDefault(); }
   else if (mod && input.key === '0') { if (active) active.resetZoom(); e.preventDefault(); }

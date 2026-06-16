@@ -29,7 +29,7 @@ export function toNavURL(raw) {
   const scheme = s.match(/^([a-z][a-z0-9+.-]*):\/\//i);
   if (scheme) {
     const proto = scheme[1].toLowerCase();
-    if ((proto === 'http' || proto === 'https' || proto === 'file') && URL.canParse(s)) return s;
+    if ((proto === 'http' || proto === 'https' || proto === 'file' || proto === 'pane') && URL.canParse(s)) return s;
     return search(s);
   }
 

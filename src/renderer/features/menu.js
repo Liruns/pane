@@ -42,6 +42,16 @@ function close() {
 function render(settings) {
   panel.replaceChildren();
 
+  const history = document.createElement('div');
+  history.className = 'm-row';
+  history.innerHTML = '<span class="m-label">History</span><span class="m-key">Ctrl+H</span>';
+  on(history, 'click', () => { window.pane.navigate('pane://history/'); close(); });
+  panel.append(history);
+
+  const sep = document.createElement('div');
+  sep.className = 'm-sep';
+  panel.append(sep);
+
   const toggle = document.createElement('div');
   toggle.className = 'm-row toggle' + (settings.restoreSession ? ' checked' : '');
   toggle.innerHTML = '<span class="m-label">Restore last session</span><span class="m-switch"></span>';
