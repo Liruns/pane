@@ -76,11 +76,12 @@ class PaneWindow {
   }
 
   _saveSession() {
-    if (!settings.get('restoreSession')) return;
+    if (this.win.isDestroyed() || !settings.get('restoreSession')) return;
     session.save(this.serialize());
   }
 
   layout() {
+    if (this.win.isDestroyed()) return; // a resize event can still fire mid-teardown
     const { width, height } = this.win.getContentBounds();
     if (this._lastBounds && this._lastBounds.width === width && this._lastBounds.height === height) return;
     this._lastBounds = { width, height };
@@ -95,6 +96,7 @@ class PaneWindow {
   /** Grow/shrink the chrome view to host an overlay (suggestions / menu). The view is
    *  transparent below the toolbar, so the page shows through around the panel. */
   setChromeHeight(h) {
+    if (this.win.isDestroyed()) return;
     const { width } = this.win.getContentBounds();
     this.chrome.view.setBounds({ x: 0, y: 0, width, height: Math.max(CHROME_HEIGHT, Math.round(h)) });
   }
@@ -128,6 +130,7 @@ class PaneWindow {
     tabs.on('tabs', (state) => {
       chrome.send(CH.TABS_STATE, state);
       this._saveSession();
+      if (win.isDestroyed()) return;
       const a = state.tabs.find((t) => t.id === state.activeId);
       win.setTitle(a && a.title && a.title !== 'New Tab' ? `${a.title} — Pane` : 'Pane');
     });

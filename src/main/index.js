@@ -35,6 +35,7 @@ app.on('before-quit', () => {
   if (current && !current.win.isDestroyed() && settings.get('restoreSession')) {
     session.saveNow(current.serialize());
   }
+  downloads.flush(); // persist any just-finished download still inside the save debounce
 });
 
 app.on('window-all-closed', () => {

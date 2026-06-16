@@ -62,6 +62,13 @@ class PageView extends EventEmitter {
       this.emit('open-external', url);
       return { action: 'deny' };
     });
+
+    // Hardening: a web page must not script its way into a privileged pane:// surface.
+    // Our own loads use loadURL (which doesn't fire will-navigate); intra-pane links are
+    // allowed. Blocks `location = 'pane://…'` / link clicks from web content.
+    wc.on('will-navigate', (e, url) => {
+      if (url.startsWith('pane://') && !wc.getURL().startsWith('pane://')) e.preventDefault();
+    });
   }
 
   _emitState() {
