@@ -26,7 +26,6 @@ module.exports = {
   NAV_STATE: 'pane:nav-state',
   LOADING: 'pane:loading',
   LOAD_ERROR: 'pane:load-error',
-  TITLE: 'pane:title',
   FOCUS_ADDRESS: 'pane:focus-address',
   TABS_STATE: 'pane:tabs-state',
   TOAST: 'pane:toast',

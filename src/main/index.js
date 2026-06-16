@@ -17,6 +17,7 @@ let current = null;
 function createWindow() {
   const restore = settings.get('restoreSession') ? session.load() : null;
   current = new PaneWindow(restore);
+  current.win.on('closed', () => { current = null; }); // drop the dangling ref once gone
 }
 
 app.whenReady().then(() => {
@@ -31,7 +32,9 @@ app.whenReady().then(() => {
 });
 
 app.on('before-quit', () => {
-  if (current && settings.get('restoreSession')) session.saveNow(current.serialize());
+  if (current && !current.win.isDestroyed() && settings.get('restoreSession')) {
+    session.saveNow(current.serialize());
+  }
 });
 
 app.on('window-all-closed', () => {

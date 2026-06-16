@@ -3,8 +3,8 @@
 // remaining hardening (documented follow-up); a dotted host that turns out dead
 // is rescued by the custom error page's "Search instead".
 
-const SEARCH_BASE = 'https://www.google.com/search?q=';
-const search = (q) => SEARCH_BASE + encodeURIComponent(q);
+export const SEARCH_BASE = 'https://www.google.com/search?q=';
+export const search = (q) => SEARCH_BASE + encodeURIComponent(q);
 
 const isIPv4 = (h) => {
   const parts = h.split('.');
@@ -35,12 +35,13 @@ export function toNavURL(raw) {
 
   const hostPort = s.split(/[/?#]/)[0];
   const host = hostPort.replace(/:\d+$/, '');
+  const proto = /:443$/.test(hostPort) ? 'https://' : 'http://'; // DESIGN §10: :443 ⇒ https
 
   // loopback / IP / IPv6 [:port][/path]
-  if (/^localhost$/i.test(host)) return 'http://' + s;
-  if (/^\[[0-9a-f:]+\]$/i.test(host)) return 'http://' + s;     // [::1], [2001:db8::1]
-  if (/^::1$/.test(host)) return 'http://[::1]' + s.slice(3);    // bare ::1[:port]
-  if (isIPv4(host)) return 'http://' + s;
+  if (/^localhost$/i.test(host)) return proto + s;
+  if (/^\[[0-9a-f:]+\]$/i.test(host)) return proto + s;         // [::1], [2001:db8::1]
+  if (/^::1$/.test(host)) return proto + '[::1]' + s.slice(3);   // bare ::1[:port]
+  if (isIPv4(host)) return proto + s;
 
   // bare host with a dot → likely a hostname (URL API normalizes IDN → punycode)
   if (!/\s/.test(s) && host.includes('.')) {

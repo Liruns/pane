@@ -2,17 +2,14 @@
 // then the Go-to / Search actions. While open, the chrome view grows to cover the panel
 // (via the overlay helper); the chrome is transparent around it so the page shows through.
 import { $, on } from '../lib/dom.js';
-import { toNavURL } from './url-parser.js';
+import { toNavURL, search, SEARCH_BASE } from './url-parser.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
+import { ICONS } from '../lib/icons.js';
 
-const SEARCH = 'https://www.google.com/search?q=';
 const ROW_H = 36;
 
-const ICON = {
-  go: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
-  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
-  history: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
-};
+// Row glyphs keyed by the item's `icon` field (set in actions()/history mapping).
+const ICON = { go: ICONS.arrowRight, search: ICONS.search, history: ICONS.history };
 
 let panel, pill, addr;
 let rows = [];
@@ -45,14 +42,14 @@ const display = (u) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '');
 function actions(s) {
   const url = toNavURL(s);
   if (!url) return [];
-  if (url.startsWith(SEARCH)) {
+  if (url.startsWith(SEARCH_BASE)) {
     const out = [{ icon: 'search', label: `Search for “${s}”`, url }];
     if (!/\s/.test(s) && s.includes('.')) out.push({ icon: 'go', label: `Go to ${s}`, url: 'https://' + s });
     return out;
   }
   return [
     { icon: 'go', label: `Go to ${hostOf(url)}`, url },
-    { icon: 'search', label: `Search for “${s}”`, url: SEARCH + encodeURIComponent(s) },
+    { icon: 'search', label: `Search for “${s}”`, url: search(s) },
   ];
 }
 

@@ -12,9 +12,9 @@
 .sg-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   height: 36px;
-  padding: 0 10px;
+  padding: 0 12px;
   border-radius: 6px;
   color: var(--fg-muted);
   cursor: default;

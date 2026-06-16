@@ -37,9 +37,11 @@ class PageView extends EventEmitter {
     wc.on('did-start-loading', () => { if (!this._internalLoad) this.emit('loading', true); });
     wc.on('did-stop-loading', () => { this._internalLoad = false; this.emit('loading', false); this._emitState(); });
 
-    wc.on('did-start-navigation', (_e, url, isInPlace, isMainFrame) => {
-      if (!isMainFrame || isInPlace) return;
-      if (isInternalUrl(url)) { this._internalLoad = true; return; }
+    // Electron 42: navigation-start events deliver a single `details` object
+    // ({ url, isSameDocument, isMainFrame, ... }) — not the old positional args.
+    wc.on('did-start-navigation', (details) => {
+      if (!details.isMainFrame || details.isSameDocument) return;
+      if (isInternalUrl(details.url)) { this._internalLoad = true; return; }
       this._displayUrl = null;
       this.emit('favicon', '');
       this.emit('loading', true);
