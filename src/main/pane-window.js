@@ -58,6 +58,13 @@ class PaneWindow {
     }
   }
 
+  /** Grow/shrink the chrome view to host an overlay (the suggestions dropdown). The view
+   *  is transparent below the toolbar, so the page shows through around the panel. */
+  setChromeHeight(h) {
+    const { width } = this.win.getContentBounds();
+    this.chrome.view.setBounds({ x: 0, y: 0, width, height: Math.max(CHROME_HEIGHT, Math.round(h)) });
+  }
+
   _setActiveView(view) {
     if (this._activeView === view) return;
     if (this._activeView) this.win.contentView.removeChildView(this._activeView.view);

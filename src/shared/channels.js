@@ -13,6 +13,7 @@ module.exports = {
   TAB_CLOSE: 'pane:tab-close',
   TAB_ACTIVATE: 'pane:tab-activate',
   TOGGLE_MAXIMIZE: 'pane:toggle-maximize',
+  SET_CHROME_HEIGHT: 'pane:set-chrome-height',
   // main → renderer (send)
   NAV_STATE: 'pane:nav-state',
   LOADING: 'pane:loading',

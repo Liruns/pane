@@ -26,6 +26,7 @@ function registerIpc(getWindow) {
     const w = getWindow();
     if (w) { w.win.isMaximized() ? w.win.unmaximize() : w.win.maximize(); }
   });
+  ipcMain.handle(CH.SET_CHROME_HEIGHT, (_e, h) => { const w = getWindow(); if (w) w.setChromeHeight(h); });
 }
 
 module.exports = { registerIpc };
