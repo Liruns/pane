@@ -1,5 +1,5 @@
-// The ⋮ settings menu — a chrome overlay (via the overlay helper). Holds the
-// session-restore toggle and the clear-history action.
+// The ⋮ menu — a chrome overlay (via the overlay helper). A pure launcher: it opens
+// pane:// internal pages (History, Settings). Settings logic lives on those pages, not here.
 import { $, on } from '../lib/dom.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
 
@@ -21,9 +21,8 @@ export function initMenu() {
   on(window, 'keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(); });
 }
 
-async function open() {
-  const settings = await window.pane.getSettings();
-  render(settings);
+function open() {
+  render();
 
   const r = btn.getBoundingClientRect();
   panel.style.top = `${r.bottom + 6}px`;
@@ -39,36 +38,16 @@ function close() {
   closeOverlay(close);
 }
 
-function render(settings) {
+function render() {
   panel.replaceChildren();
+  item('History', 'Ctrl+H', 'pane://history/');
+  item('Settings', 'Ctrl+,', 'pane://settings/');
+}
 
-  const history = document.createElement('div');
-  history.className = 'm-row';
-  history.innerHTML = '<span class="m-label">History</span><span class="m-key">Ctrl+H</span>';
-  on(history, 'click', () => { window.pane.navigate('pane://history/'); close(); });
-  panel.append(history);
-
-  const sep = document.createElement('div');
-  sep.className = 'm-sep';
-  panel.append(sep);
-
-  const toggle = document.createElement('div');
-  toggle.className = 'm-row toggle' + (settings.restoreSession ? ' checked' : '');
-  toggle.innerHTML = '<span class="m-label">Restore last session</span><span class="m-switch"></span>';
-  on(toggle, 'click', () => {
-    const next = !toggle.classList.contains('checked');
-    toggle.classList.toggle('checked', next);
-    window.pane.setSetting('restoreSession', next);
-  });
-  panel.append(toggle);
-
-  const clear = document.createElement('div');
-  clear.className = 'm-row';
-  clear.innerHTML = '<span class="m-label">Clear history</span>';
-  on(clear, 'click', async () => {
-    await window.pane.clearHistory();
-    clear.querySelector('.m-label').textContent = 'History cleared';
-    setTimeout(close, 700);
-  });
-  panel.append(clear);
+function item(label, hint, target) {
+  const row = document.createElement('div');
+  row.className = 'm-row';
+  row.innerHTML = `<span class="m-label">${label}</span><span class="m-key">${hint}</span>`;
+  on(row, 'click', () => { window.pane.navigate(target); close(); });
+  panel.append(row);
 }

@@ -11,5 +11,9 @@ if (location.protocol === 'pane:') {
       remove: (url, time) => ipcRenderer.invoke('pane-internal:history-remove', url, time),
       clear: () => ipcRenderer.invoke('pane-internal:history-clear'),
     },
+    settings: {
+      get: () => ipcRenderer.invoke('pane-internal:settings-get'),
+      set: (key, value) => ipcRenderer.invoke('pane-internal:settings-set', key, value),
+    },
   });
 }

@@ -3,6 +3,7 @@
 // sender is a pane:// page — the preload guard is convenience; this is the real boundary.
 const { ipcMain } = require('electron');
 const history = require('./history');
+const settings = require('./settings');
 
 const fromInternal = (event) => {
   try { return new URL(event.senderFrame.url).protocol === 'pane:'; } catch { return false; }
@@ -20,6 +21,9 @@ function registerInternalIpc(getWindow) {
   ipcMain.handle('pane-internal:history-list', (e, opts) => (fromInternal(e) ? history.list(opts) : []));
   ipcMain.handle('pane-internal:history-remove', (e, url, time) => { if (fromInternal(e)) history.remove(url, time); });
   ipcMain.handle('pane-internal:history-clear', (e) => { if (fromInternal(e)) history.clear(); });
+
+  ipcMain.handle('pane-internal:settings-get', (e) => (fromInternal(e) ? settings.getAll() : {}));
+  ipcMain.handle('pane-internal:settings-set', (e, key, value) => { if (fromInternal(e)) settings.set(key, value); });
 }
 
 module.exports = { registerInternalIpc, fromInternal };
