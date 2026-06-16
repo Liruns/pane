@@ -52,7 +52,11 @@ back/forward/reload, detached devtools, trickle loading bar (aborts on failure),
 native window controls, resize integrity, new-tab start page, custom error page,
 bundled Inter font.
 
-Remaining hardening (deferred): full Public Suffix List + "Go to" omnibox suggestions;
-Mica-through-toolbar (flip `--toolbar-bg` in `styles/tokens.css` and confirm on a Win11 box).
+Remaining hardening (deferred): full Public Suffix List + "Go to" omnibox suggestions.
+
+Mica-through-toolbar is **blocked**: `backgroundMaterial: 'mica'` + `titleBarOverlay` (the native
+window buttons) renders black and breaks on maximize (electron#42393 / #39959 / #41824). The brief
+locks native window buttons, so the toolbar ships opaque dark. Revisit if Electron fixes the bug, or
+via a native DWM helper (out of scope for v0).
 
 Not in v0 (roadmap): tabs → runtime/devtools depth → infinite-canvas multi-instance.

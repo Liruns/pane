@@ -28,9 +28,9 @@
   --toolbar-h: 48px;
   --wco-right: 140px; /* reserved for native window controls; set at runtime (window-controls.js) */
 
-  /* DESIGN §2: v0 ships the honest OPAQUE fallback so the toolbar looks right everywhere.
-     For true Mica-through-toolbar, set --toolbar-bg: transparent (and optionally layer
-     rgba(22,22,24,0.55) as a deepening tint), then confirm on a Win11 box. */
+  /* Opaque toolbar. Mica-through-toolbar is BLOCKED by an Electron bug — backgroundMaterial
+     'mica' + titleBarOverlay (the native window buttons) renders black (electron/electron
+     issues 42393, 39959). Native buttons take precedence per the brief; ship the opaque dark. */
   --toolbar-bg: var(--surface);
 
   /* type */

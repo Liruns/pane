@@ -22,7 +22,9 @@ class PaneWindow {
       titleBarStyle: 'hidden',
       titleBarOverlay: { color: COLORS.surface, symbolColor: COLORS.symbol, height: TABSTRIP_HEIGHT },
       backgroundColor: COLORS.canvas,
-      backgroundMaterial: 'mica', // Win11 translucency (DESIGN §1/§6)
+      // NB: Mica (backgroundMaterial:'mica') is intentionally NOT set — it renders black with
+      // titleBarOverlay and breaks on maximize (electron/electron issues 42393, 39959, 41824).
+      // Native window buttons win per the brief, so the toolbar ships opaque. Revisit if fixed.
     });
 
     this.chrome = new ChromeView();
