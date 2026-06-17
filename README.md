@@ -87,7 +87,8 @@ A focused daily driver — everything below is hand-built chrome, no accounts, n
   - **Downloads** (`Ctrl+J`) — auto-save to the OS Downloads folder, live progress, open /
     show-in-folder.
   - **Settings** (`Ctrl+,`) — restore-session toggle, clear history. The ⋮ menu is a launcher.
-- **Find in page** (`Ctrl+F`), per-tab **zoom** (`Ctrl±` / `Ctrl+0`), detached **devtools**.
+- **Find in page** (`Ctrl+F`), per-tab **zoom** (`Ctrl±` / `Ctrl+0`), dockable **devtools**
+  (`Ctrl+Shift+I`; right-click the button to dock right / bottom / detach — resizable, remembered).
 - **Session restore** — reopen tabs + window bounds on launch.
 - **Keyboard a11y** — arrow-key navigation in the tab strip and the ⋮ / right-click menus,
   with `2px` accent focus rings (DESIGN §6).
@@ -105,9 +106,9 @@ A focused daily driver — everything below is hand-built chrome, no accounts, n
 ## Known constraints (deferred)
 
 - **Mica** — blocked by the Electron bug above; revisit if fixed, or via a native DWM helper.
-- **Docked devtools** — detached in v0 (Chromium docks to the host window, not a custom view).
 
 ## Roadmap
 
-Tabs ✓ → runtime/devtools depth → an **infinite-canvas** mode where many Pane instances float
-and arrange on one surface. The canvas future is earned by a flawless single pane first.
+Tabs ✓ → runtime/devtools depth (dockable devtools ✓) → an **infinite-canvas** mode where many
+Pane instances float and arrange on one surface. The canvas future is earned by a flawless single
+pane first.

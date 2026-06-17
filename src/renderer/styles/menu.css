@@ -31,6 +31,8 @@
 .m-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .m-key { flex: none; font-family: var(--font-mono); font-size: 11px; color: var(--fg-faint); }
 .m-sep { height: 1px; margin: 4px 8px; background: var(--hairline); }
+/* The current choice in a picker menu (e.g. the devtools dock side) — blue label, the one accent. */
+.m-row.active .m-label { color: var(--accent-dark); }
 
 /* toggle switch */
 .m-switch {

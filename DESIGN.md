@@ -58,7 +58,7 @@ tokens:
     address-bar:    { type: input, bg: "rgba(255,255,255,0.06)", fg: "foreground", radius: 980, height: 32, padding: "0 12px", font: "13.5px mono", active: "2px ring accent-on-dark + bg rgba(255,255,255,0.09)", drag: "no-drag (must focus/select)", use: "smart omnibox — see §10 parsing contract" }
     nav-button:     { type: icon-button, size: 30, radius: 8, fg: "foreground-muted", hover: "bg rgba(255,255,255,0.08) + fg foreground", disabled: "fg foreground-faint", use: "back / forward / reload" }
     loading-bar:    { type: progress, height: 2, fill: "primary", track: "transparent", motion: "indeterminate trickle, ease only (chrome motion); aborts on did-fail-load", use: "top edge of web view during main-frame navigation" }
-    devtools-toggle:{ type: icon-button, size: 30, radius: 8, active: "fg accent-on-dark", behavior: "v0 = detached window (openDevTools mode:'detach'); docked-in-chrome is roadmap", use: "toggle devtools" }
+    devtools-toggle:{ type: icon-button, size: 30, radius: 8, active: "fg accent-on-dark", behavior: "v0 = dockable right/bottom/detach (per-tab host WebContentsView via setDevToolsWebContents); right-click picks side; side+per-axis size persisted", use: "toggle devtools / right-click to dock" }
     window-controls:{ type: native, platform: "win32 WCO (titleBarOverlay)", reserved: "env(titlebar-area-*) at runtime — not a literal", note: "min/max/close OS-drawn; keep the toolbar right cluster clear of the reserved region; width changes on maximize & DPI", use: "native min/maximize/close" }
     menu:           { type: popover, bg: "surface-1", radius: 12, shadow: "shadow.popover", blur: "popover_blur ok here (DOM over DOM)", item: "13px, 8px 12px, hover bg rgba(255,255,255,0.06)", suggestion-row-radius: 6, use: "overflow / suggestions / context" }
 ---
@@ -74,6 +74,10 @@ tokens:
 > **v2 (2026-06-16):** revised after independent design + technical review — translucency
 > mechanism corrected (Mica, not `backdrop-filter`), devtools scoped to detached for v0,
 > motion story unified to ease-for-chrome, token provenance disclosed, address parser hardened.
+>
+> **v3 (2026-06-17):** docked devtools delivered — the v2 "roadmap" item shipped. DevTools now
+> docks right / bottom (resizable splitter) or detaches, rendering into a per-tab host
+> `WebContentsView` via `setDevToolsWebContents`; side + size persisted. §4 / §14 updated.
 
 ## 1. Visual Theme & Atmosphere
 
@@ -194,7 +198,7 @@ Pane runs **one chrome surface** — the toolbar — and a small kit of controls
 ### DevTools Toggle
 - Icon button (same 30×30 grammar)
 - Active (devtools open): icon → `#2997ff`; otherwise `foreground-muted`
-- **v0 behavior**: opens **detached** in its own window via `openDevTools({ mode: 'detach' })`. Docking devtools *inside* the custom chrome is **not** a clean v0 default — Chromium docks relative to the host window and ignores a custom `WebContentsView` layout. Docked-right is a roadmap item requiring a second `WebContentsView` + `setDevToolsWebContents` sharing the resize plumbing.
+- **v0 behavior**: **dockable** — dock **right**, dock **bottom**, or **detach**. Right-click the toggle to choose; the dock side and per-axis size are **persisted**. Because native Chromium docking ignores a custom `WebContentsView` layout (it docks relative to the host window), Pane renders devtools into a **per-tab host `WebContentsView`** via `setDevToolsWebContents(host) + openDevTools({ mode: 'detach' })` — the `detach` mode only keeps Chromium from spawning its own window; Pane then tiles `page │ splitter │ devtools` itself and resizes the dock with a thin splitter view. **Detach** reparents that same host view into a satellite `BaseWindow`. This is the `BaseWindow` + multiple-`WebContentsView` foundation paying off (§5).
 
 ### Window Controls (native)
 - Windows 11: native **WCO** via `titleBarOverlay` — min/maximize/close drawn by the OS.
@@ -397,7 +401,7 @@ What Pane refuses is as defining as what it embraces. It is **not** a Chromium o
 | **Error (network / unreachable)** | The loading bar aborts (`did-fail-load`) and a Pane-rendered error surface paints on `canvas`: short mono URL, one-sentence specific cause in `foreground`, one action (Retry / Search instead) as a blue pill. No illustration, no emoji. |
 | **Error (invalid / unresolved address)** | Inline: the address bar offers "Search for `<query>`" as the top suggestion rather than throwing an error. |
 | **Insecure / cert warning** | Security glyph → `#ff453a`; an interstitial states the specific problem and the risk in plain language, with a deliberately un-styled (not blue) "proceed anyway" link. Firmness without theater. |
-| **DevTools open** | Devtools toggle icon → `#2997ff`; devtools opens in a **detached window** (v0). Toolbar layout unaffected. |
+| **DevTools open** | Devtools toggle icon → `#2997ff`; devtools docks **right / bottom** (resizable via a splitter) or **detaches** to its own window — right-click the toggle to choose; the side and size are remembered. The page reflows to make room; the toolbar height is unaffected. |
 | **Focused address bar** | Fill lightens to `rgba(255,255,255,0.09)`, `2px #2997ff` ring, full URL selected, suggestion dropdown opens beneath. |
 | **Disabled control** | Icon → `foreground-faint`; no hover; geometry unchanged (a disabled pill stays a pill). Applies to nav buttons with no history. |
 | **Window blurred (app not focused)** | Mica goes **inert** per the OS — a subtle shift (Mica is a window-background material tied to the wallpaper, so it does not desaturate strongly the way Acrylic would). Accent stays but reads muted. Matches native Win11 inactive-window behavior. |
@@ -446,7 +450,7 @@ Surface mode + domain + typeface adaptations: dark-default selected from Apple's
 
 v2 review corrections applied:
 - TRANSLUCENCY (was technically false): CSS backdrop-filter cannot blur the desktop or the sibling native WebContentsView — it samples only same-document DOM layers. Win11 translucency is now stated as backgroundMaterial:'mica' only, with a transparent toolbar window region; backdrop-filter restricted to in-page popovers; honest opaque #1d1d1f fallback off Win11. (§1, §2 Material, §4 Toolbar, §6, §7, §9.)
-- DEVTOOLS: docked-right is not achievable against a custom WebContentsView layout (Chromium docks to the host window). v0 = detached (openDevTools mode:'detach'); docking moved to roadmap (2nd WebContentsView + setDevToolsWebContents). (§4, §14.)
+- DEVTOOLS: docked-right is not achievable against a custom WebContentsView layout (Chromium docks to the host window). v0 = detached (openDevTools mode:'detach'); docking moved to roadmap (2nd WebContentsView + setDevToolsWebContents). (§4, §14.) **→ superseded in v3 (2026-06-17): docking *is* achievable — render devtools into a per-tab host WebContentsView via `setDevToolsWebContents` and tile it; right/bottom/detach now shipped. See the v3 intro note.**
 - MOTION: removed the spring/ease self-contradiction. Chrome motion is ease only; spring is reserved for future gesture surfaces (v0 has none). Loading-bar completion is ease-standard. (§1 key char, §4, §7, §9, §15.)
 - WCO: replaced hard-coded ~138px with env(titlebar-area-*) + geometrychange (DPI/maximize variable); named setTitleBarOverlay for theming. (§4, §8, §9, frontmatter platform.)
 - RESIZE: setBounds synchronously in main-process 'will-resize' (rAF-gating lags during the Windows modal resize loop); seam-hider opaque fill on the web-view region only (window/toolbar stays transparent for Mica — resolves the translucency↔seam coupling); overlap retained. (§5.)

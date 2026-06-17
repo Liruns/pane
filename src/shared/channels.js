@@ -9,6 +9,9 @@ module.exports = {
   RELOAD: 'pane:reload',
   STOP: 'pane:stop',
   TOGGLE_DEVTOOLS: 'pane:toggle-devtools',
+  DEVTOOLS_SET_DOCK: 'pane:devtools-set-dock', // side: 'right' | 'bottom' | 'detach'
+  SPLITTER_DRAG: 'pane:splitter-drag',         // splitter → main (screenX, screenY)
+  SPLITTER_DRAG_END: 'pane:splitter-drag-end',
   TAB_NEW: 'pane:tab-new',
   TAB_CLOSE: 'pane:tab-close',
   TAB_ACTIVATE: 'pane:tab-activate',
@@ -30,7 +33,8 @@ module.exports = {
   // main → renderer (send)
   NAV_STATE: 'pane:nav-state',
   LOADING: 'pane:loading',
-  DEVTOOLS_STATE: 'pane:devtools-state',
+  DEVTOOLS_STATE: 'pane:devtools-state', // { open, dock: 'right'|'bottom'|'detach'|null }
+  SPLITTER_ORIENTATION: 'pane:splitter-orientation', // main → splitter ('col' | 'row')
   LOAD_ERROR: 'pane:load-error',
   FOCUS_ADDRESS: 'pane:focus-address',
   TABS_STATE: 'pane:tabs-state',

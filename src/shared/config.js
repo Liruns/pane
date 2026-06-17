@@ -12,4 +12,13 @@ module.exports = {
     surface: '#1d1d1f',  // toolbar fallback / WCO overlay tint
     symbol: '#f5f5f7',   // WCO caption-button glyphs
   },
+  // Docked devtools (DESIGN §4 "runtime/devtools depth"). Sizes are the dock's extent on its
+  // split axis (width for a right dock, height for a bottom dock); MIN_PAGE keeps the page usable.
+  DEVTOOLS: {
+    SPLITTER: 6,         // draggable gutter thickness (px)
+    MIN: 250,            // smallest the devtools dock may shrink to
+    MIN_PAGE: 150,       // smallest the page may shrink to beside/above the dock
+    DEFAULT_RIGHT: 480,  // initial right-dock width
+    DEFAULT_BOTTOM: 320, // initial bottom-dock height
+  },
 };
