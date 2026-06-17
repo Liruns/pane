@@ -31,21 +31,25 @@ export function initAddressBar() {
   // Ctrl+L (focus address) is handled in main via before-input-event → this event.
   window.pane.onFocusAddress(() => { addr.focus(); addr.select(); });
 
-  // DESIGN §4/§12: the leading glyph must tell the truth by SHAPE, not just color — lock when
-  // secure, warning when the load failed, search otherwise. (Color alone made HTTPS a green magnifier.)
+  // DESIGN §4/§12: the leading glyph must tell the truth by SHAPE, not just color — closed lock
+  // when secure (https), an open lock when the page loaded over plain http (insecure but not an
+  // error, so muted not red — §10 forbids scare-flooding), warning when the load failed, and the
+  // search magnifier only when there's no loaded page (new tab / empty).
   const setGlyph = (name) => { statusGlyph.innerHTML = ICONS[name]; };
 
   window.pane.onNavState((d) => {
     if (document.activeElement !== addr) {
       addr.value = d.url && d.url !== 'about:blank' ? d.url : '';
     }
-    statusGlyph.classList.remove('secure', 'error');
-    if (d.url && d.url.startsWith('https://')) { statusGlyph.classList.add('secure'); setGlyph('lock'); }
+    statusGlyph.classList.remove('secure', 'insecure', 'error');
+    const url = d.url || '';
+    if (url.startsWith('https://')) { statusGlyph.classList.add('secure'); setGlyph('lock'); }
+    else if (url.startsWith('http://')) { statusGlyph.classList.add('insecure'); setGlyph('unlock'); }
     else setGlyph('search');
   });
 
   window.pane.onLoadError(() => {
-    statusGlyph.classList.remove('secure');
+    statusGlyph.classList.remove('secure', 'insecure');
     statusGlyph.classList.add('error');
     setGlyph('warning');
   });

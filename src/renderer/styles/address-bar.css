@@ -29,6 +29,8 @@
 }
 .status-glyph svg { width: 14px; height: 14px; }
 .status-glyph.secure { color: var(--success); }
+/* http:// is insecure but not an error — a quiet open lock, never red (DESIGN §4/§10). */
+.status-glyph.insecure { color: var(--fg-muted); }
 .status-glyph.error { color: var(--danger); }
 
 #address {

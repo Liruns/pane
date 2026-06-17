@@ -84,7 +84,15 @@ class PaneWindow {
     // 'closed' without routing through TabManager teardown, so the dock retires them explicitly.
     this.win.on('closed', () => this.dock.handleWindowClosed(this.tabs.tabs));
 
-    this.chrome.webContents.once('did-finish-load', () => this.tabs.refresh());
+    // DESIGN §14: when the app loses focus the chrome goes inert (a subtle muted shift, matching
+    // native Win11 inactive-window behavior). The renderer applies the visual; main just reports state.
+    this.win.on('focus', () => this._sendActive(true));
+    this.win.on('blur', () => this._sendActive(false));
+
+    this.chrome.webContents.once('did-finish-load', () => {
+      this.tabs.refresh();
+      this._sendActive(this.win.isFocused()); // sync initial state once the toolbar is listening
+    });
   }
 
   _restoreTabs(restore) {
@@ -113,6 +121,11 @@ class PaneWindow {
   _saveSession() {
     if (this.win.isDestroyed() || !settings.get('restoreSession')) return;
     session.save(this.serialize());
+  }
+
+  _sendActive(active) {
+    if (this.win.isDestroyed()) return;
+    this.chrome.send(CH.WINDOW_ACTIVE, { active: !!active });
   }
 
   layout(targetBounds) {
