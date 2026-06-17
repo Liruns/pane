@@ -28,4 +28,12 @@ module.exports = {
     WIDTH: 240,    // left-rail width
     MIN_PAGE: 320, // never let the rail shrink the page below this
   },
+  // Infinite canvas (DESIGN §11 / CANVAS.md) — the deferred zoom-/pan-able surface of many panes.
+  // Scale band: a live pane's zoom factor is usable in a bounded range, so the camera clamps here.
+  CANVAS: {
+    MIN_SCALE: 0.1,  // furthest zoom-out
+    MAX_SCALE: 4,    // closest zoom-in
+    DEFAULT_PANE: { width: 800, height: 600 }, // a fresh pane's world size
+    PANE_GAP: 40,    // world-space gap when auto-arranging new panes
+  },
 };
