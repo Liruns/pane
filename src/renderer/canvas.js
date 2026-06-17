@@ -31,6 +31,19 @@ const GRID_STEP = 32; // dot-grid base spacing (region-local px at scale 1); sca
 const TINY_W = 120;
 const TINY_H = 64;
 const KEY_PAN_STEP = 60; // arrow-key pan distance per press (screen px)
+const HANDLE_HIT = 12; // resize-handle hit size (screen px)
+const HANDLE_OUT = 4; // handles sit ~4px OUTSIDE the rect edge, clear of the live native view
+// The 8 active-pane resize handles: compass edge → the cursor it shows.
+const HANDLES = [
+  ['n', 'ns-resize'],
+  ['s', 'ns-resize'],
+  ['e', 'ew-resize'],
+  ['w', 'ew-resize'],
+  ['ne', 'nesw-resize'],
+  ['sw', 'nesw-resize'],
+  ['nw', 'nwse-resize'],
+  ['se', 'nwse-resize'],
+];
 
 const root = $('#canvas');
 const els = new Map(); // pane id → { wrap, shot, ring, titleBar, favicon, titleText, img } (diffed across renders)
@@ -39,18 +52,22 @@ let state = { on: false, scale: 1, camera: { x: 0, y: 0, scale: 1 }, panes: [] }
 let panMoved = false; // set while a pan drag moves, so the trailing click doesn't also raise a tile
 
 const hud = buildHud(); // bottom-right control cluster — a sibling of #canvas so its clicks don't pan
+const minimap = buildMinimap(); // top-right overview navigator — also a sibling of #canvas
 
 window.pane.onCanvasState((s) => {
   state = s || { on: false, scale: 1, camera: { x: 0, y: 0, scale: 1 }, panes: [] };
   if (!state.on) {
     clear();
     hud.el.classList.add('hidden');
+    minimap.el.classList.add('hidden');
     return;
   }
   hud.el.classList.remove('hidden');
+  minimap.el.classList.remove('hidden');
   updateGrid(state.camera);
   hud.setZoom(state.scale);
   render(state.panes || []);
+  minimap.update(state);
 });
 
 initCanvasGestures();
@@ -118,9 +135,22 @@ function createPane(id) {
 
   titleBar.append(favicon, titleText, close);
   wrap.append(shot, ring, titleBar);
+
+  // Resize handles — shown only on the ACTIVE pane (CSS hides them otherwise). They live in this DOM,
+  // offset OUTWARD from the rect edge so their hit area sits clear of the live native view interior.
+  const handles = {};
+  for (const [edge, cursor] of HANDLES) {
+    const h = document.createElement('div');
+    h.className = `pane-handle h-${edge}`;
+    h.style.cursor = cursor;
+    initHandleDrag(h, id, edge);
+    handles[edge] = h;
+    wrap.append(h);
+  }
+
   root.append(wrap);
 
-  const rec = { wrap, shot, ring, titleBar, favicon, titleText, img: null, favKey: null, shotKey: null };
+  const rec = { wrap, shot, ring, titleBar, favicon, titleText, handles, img: null, favKey: null, shotKey: null };
 
   // Title-bar click raises/focuses the pane (DESIGN: blue marks the active one).
   on(titleBar, 'click', () => window.pane.canvasRaisePane(id));
@@ -160,11 +190,51 @@ function position(rec, p, sc) {
   rec.shot.style.height = `${sc.height}px`;
   setShot(rec, p);
 
+  // Resize handles (active pane only; CSS hides them otherwise). Place each around the rect, offset
+  // ~HANDLE_OUT px OUTWARD so the clickable area sits outside the live native view. Edge handles are
+  // centered on each side; corner handles sit at the rect corners. positionHandles is cheap, so it
+  // runs every frame alongside the rest of the chrome.
+  if (p.active) positionHandles(rec.handles, sc);
+
   const label = p.title || 'New Tab';
   if (rec.titleText.textContent !== label) rec.titleText.textContent = label;
   rec.titleBar.title = label;
 
   setFavicon(rec, p.favicon);
+}
+
+// Lay the 8 handles around the rect. Each is HANDLE_HIT px; edge midpoints and corners are nudged
+// HANDLE_OUT px outward so the hit area clears the live native view. Coordinates are region-local px.
+function positionHandles(handles, sc) {
+  const hh = HANDLE_HIT;
+  const half = hh / 2;
+  const left = sc.x;
+  const right = sc.x + sc.width;
+  const top = sc.y;
+  const bottom = sc.y + sc.height;
+  const cx = sc.x + sc.width / 2;
+  const cy = sc.y + sc.height / 2;
+  // Outer edge lines (the strip just outside the rect) and centered corner points.
+  const outL = left - HANDLE_OUT - hh;
+  const outR = right + HANDLE_OUT;
+  const outT = top - HANDLE_OUT - hh;
+  const outB = bottom + HANDLE_OUT;
+  const pos = {
+    n: [cx - half, outT],
+    s: [cx - half, outB],
+    w: [outL, cy - half],
+    e: [outR, cy - half],
+    nw: [outL, outT],
+    ne: [outR, outT],
+    sw: [outL, outB],
+    se: [outR, outB],
+  };
+  for (const edge in pos) {
+    const h = handles[edge];
+    if (!h) continue;
+    h.style.left = `${pos[edge][0]}px`;
+    h.style.top = `${pos[edge][1]}px`;
+  }
 }
 
 // Paint the frozen snapshot as a background-image (cheap to scale). Active pane → no tile (hole for
@@ -240,6 +310,46 @@ function initTitleDrag(titleBar, id) {
 
   // Swallow the synthetic click that follows a real drag so it doesn't also raise the pane.
   on(titleBar, 'click', (e) => { if (moved) { e.stopImmediatePropagation(); moved = false; } }, true);
+}
+
+/* ── Resize-handle drag: resize the active pane ──────────────────────────────
+   Same prev-pointer / capture pattern as initTitleDrag, but sends edge-tagged screen deltas. On
+   pointerdown we stop propagation + preventDefault so it neither starts a canvas pan nor a title
+   drag, then capture the pointer and mark the handle .dragging. */
+function initHandleDrag(handle, id, edge) {
+  let dragging = false;
+  let px = 0;
+  let py = 0;
+
+  on(handle, 'pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation(); // don't let the canvas pan logic see this
+    e.preventDefault();
+    dragging = true;
+    px = e.clientX;
+    py = e.clientY;
+    handle.classList.add('dragging');
+    handle.setPointerCapture(e.pointerId);
+  });
+
+  on(handle, 'pointermove', (e) => {
+    if (!dragging) return;
+    const dx = e.clientX - px;
+    const dy = e.clientY - py;
+    if (dx === 0 && dy === 0) return;
+    px = e.clientX;
+    py = e.clientY;
+    window.pane.canvasPaneResize(id, edge, dx, dy);
+  });
+
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    handle.classList.remove('dragging');
+    try { handle.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+  };
+  on(handle, 'pointerup', end);
+  on(handle, 'pointercancel', end);
 }
 
 /* ── Canvas gestures: pan, zoom, new pane ────────────────────────────────────
@@ -373,6 +483,141 @@ function buildHud() {
   setZoom(state.scale);
 
   return { el, setZoom };
+}
+
+/* ── Minimap: an overview navigator ───────────────────────────────────────────
+   A small fixed top-right widget (clear of the bottom-right HUD), same popover grammar as the HUD
+   (translucent surface-1, hairline, the one soft elevation, blur). It draws every pane and the
+   current viewport as outlined rects fitted into its inner area, and pointer-drag/click on the inner
+   area centers the camera on the corresponding world point. A sibling of #canvas so clicks don't pan.
+   Built once; .update(state) clears-and-rebuilds the inner rects each frame (few panes → cheap). */
+function buildMinimap() {
+  const PAD = 6; // inner padding (px) so rects don't touch the widget edge
+
+  const el = document.createElement('div');
+  el.className = 'canvas-minimap hidden';
+
+  const inner = document.createElement('div');
+  inner.className = 'minimap-inner';
+  el.append(inner);
+  document.body.append(el);
+
+  // The last fit transform — kept so a pointer interaction can invert local px → world point.
+  let fit = null; // { bx, by, mScale, offX, offY }
+
+  const update = (s) => {
+    const panes = (s.panes || []).filter((p) => p.world);
+    const cam = s.camera || { x: 0, y: 0, scale: s.scale || 1 };
+    const region = s.region || { width: 0, height: 0 };
+    const scale = cam.scale || 1;
+
+    // No panes (or no usable geometry) → nothing meaningful to navigate; hide the inner rects.
+    if (panes.length === 0 || !(scale > 0)) {
+      inner.replaceChildren();
+      fit = null;
+      return;
+    }
+
+    // World bounding box = union of every pane.world AND the viewport-in-world rect.
+    const vx = -cam.x / scale;
+    const vy = -cam.y / scale;
+    const vw = region.width / scale;
+    const vh = region.height / scale;
+
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    const acc = (x, y, w, h) => {
+      if (!(w > 0) || !(h > 0)) return;
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
+      if (x + w > maxX) maxX = x + w;
+      if (y + h > maxY) maxY = y + h;
+    };
+    for (const p of panes) acc(p.world.x, p.world.y, p.world.width, p.world.height);
+    acc(vx, vy, vw, vh);
+
+    const bw = maxX - minX;
+    const bh = maxY - minY;
+    if (!(bw > 0) || !(bh > 0) || !isFinite(bw) || !isFinite(bh)) {
+      inner.replaceChildren();
+      fit = null;
+      return;
+    }
+
+    // Inner drawable area (the widget's content box minus padding).
+    const innerW = inner.clientWidth - PAD * 2;
+    const innerH = inner.clientHeight - PAD * 2;
+    if (!(innerW > 0) || !(innerH > 0)) { fit = null; return; }
+
+    const mScale = Math.min(innerW / bw, innerH / bh);
+    // Center the fitted bbox in the inner area.
+    const offX = PAD + (innerW - bw * mScale) / 2;
+    const offY = PAD + (innerH - bh * mScale) / 2;
+    fit = { bx: minX, by: minY, mScale, offX, offY };
+
+    const toLocal = (wx, wy) => [offX + (wx - minX) * mScale, offY + (wy - minY) * mScale];
+
+    const frag = document.createDocumentFragment();
+    for (const p of panes) {
+      const r = document.createElement('div');
+      r.className = `minimap-rect${p.active ? ' active' : ''}`;
+      const [lx, ly] = toLocal(p.world.x, p.world.y);
+      r.style.left = `${lx}px`;
+      r.style.top = `${ly}px`;
+      r.style.width = `${Math.max(2, p.world.width * mScale)}px`;
+      r.style.height = `${Math.max(2, p.world.height * mScale)}px`;
+      frag.append(r);
+    }
+    // The current viewport, as an outlined (no-fill) rect.
+    const vp = document.createElement('div');
+    vp.className = 'minimap-viewport';
+    const [vlx, vly] = toLocal(vx, vy);
+    vp.style.left = `${vlx}px`;
+    vp.style.top = `${vly}px`;
+    vp.style.width = `${Math.max(2, vw * mScale)}px`;
+    vp.style.height = `${Math.max(2, vh * mScale)}px`;
+    frag.append(vp);
+
+    inner.replaceChildren(frag);
+  };
+
+  // Pointer interaction: click or drag the inner area → invert the fit transform to a world point →
+  // center the camera there. stopPropagation so it never starts a canvas pan.
+  let dragging = false;
+  const navigate = (e) => {
+    if (!fit) return;
+    const box = inner.getBoundingClientRect();
+    const localX = e.clientX - box.left;
+    const localY = e.clientY - box.top;
+    const wx = fit.bx + (localX - fit.offX) / fit.mScale;
+    const wy = fit.by + (localY - fit.offY) / fit.mScale;
+    window.pane.canvasCenter(wx, wy);
+  };
+
+  on(inner, 'pointerdown', (e) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+    dragging = true;
+    inner.setPointerCapture(e.pointerId);
+    navigate(e);
+  });
+  on(inner, 'pointermove', (e) => {
+    if (!dragging) return;
+    e.stopPropagation();
+    navigate(e);
+  });
+  const end = (e) => {
+    if (!dragging) return;
+    dragging = false;
+    try { inner.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+  };
+  on(inner, 'pointerup', end);
+  on(inner, 'pointercancel', end);
+
+  return { el, update };
 }
 
 /* ── Keyboard shortcuts ───────────────────────────────────────────────────────
