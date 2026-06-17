@@ -26,6 +26,22 @@
   left: 0;
 }
 
+/* The frozen snapshot tile — a non-active pane rendered as a scaled bitmap (CANVAS.md §5), so only
+   the active pane needs a live renderer. Fills the page rect; bottom corners meet the title bar's
+   square join. The active pane hides its tile (the live native view shows through the hole). */
+.pane-shot {
+  position: absolute;
+  background-color: var(--canvas);
+  background-size: cover;
+  background-position: top center;
+  background-repeat: no-repeat;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+}
+.pane-shot.hidden { display: none; }
+/* A pane not yet snapshotted reads as a quiet empty surface (the ring + title still mark it). */
+.pane-shot.empty { background-color: #131315; }
+
 /* The 1px border ring around the page rect — border-as-light (DESIGN §2/§6), no drop shadow.
    `box-sizing: border-box` keeps the border outside the page content visually; the interior is
    transparent so the live page shows through. pointer-events:none so drags/wheels over the page

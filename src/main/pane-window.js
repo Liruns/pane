@@ -204,8 +204,13 @@ class PaneWindow {
 
   _setActiveView(view) {
     if (this._activeView === view) return;
+    // Canvas mode: freeze the outgoing pane to a snapshot before it's unmounted, so it keeps showing
+    // (as a frozen tile) once only the new active pane stays live (CANVAS.md §3/§5).
+    if (this._mode === 'canvas' && this._activeView && this._activeView !== view) {
+      this._captureSnapshot(this._activeView);
+    }
     this._activeView = view;
-    this._syncMountedViews(); // mount the set this mode shows (tabs: active only; canvas: every pane)
+    this._syncMountedViews(); // mount the set this mode shows (tabs / canvas: the active view only)
     if (view) {
       // The active view changed, so the new view must be (re)tiled even when the window size is
       // unchanged. dock.reconcile() only relayouts when the dock state itself changes (it early-outs
@@ -214,23 +219,20 @@ class PaneWindow {
       // reset _lastBounds so the trailing layout() no-ops instead of tiling twice.
       this._lastBounds = null;
       if (this._mode !== 'canvas') this.dock.reconcile(); // canvas mode runs no docked devtools
-      this.layout();         // tile page │ (splitter │ devtools), or the whole canvas
+      this.layout();         // tile page │ (splitter │ devtools), or the live canvas pane
       // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
-      this._pushCanvas(); // the active pane changed → refresh the canvas frames (active ring)
+      this._pushCanvas(); // the active pane changed → refresh the canvas frames + which pane is live
     }
   }
 
-  /** Recompute which page views are mounted (visible) for the current layout mode and reconcile the
-   *  child-view set. Tabs mode shows exactly the active view; canvas mode shows every pane. */
+  /** Recompute which page views are mounted (visible) for the current layout mode. Both modes mount
+   *  exactly the active view: in tabs mode it fills the region; in canvas mode it's the one LIVE pane
+   *  (with true setZoomFactor zoom) floating over the snapshot tiles the surface renders (CANVAS.md). */
   _syncMountedViews() {
-    if (this._mode === 'canvas') {
-      this._mountViews(this.tabs.tabs.map((t) => t.view));
-      this._restackCanvas();
-    } else {
-      this._mountViews(this._activeView ? [this._activeView] : []);
-    }
+    this._mountViews(this._activeView ? [this._activeView] : []);
+    if (this._mode === 'canvas') this._restackCanvas();
   }
 
   /** Mount exactly `list` (PageViews) as child views below the chrome, diffing against what's already
@@ -245,15 +247,15 @@ class PaneWindow {
     }
   }
 
-  /** Enforce canvas z-order (bottom → top): canvas surface · inactive panes · active pane · chrome.
-   *  addChildView moves an existing child, so re-adding in order restacks without re-creating views. */
+  /** Enforce canvas z-order (bottom → top): canvas surface · the one live pane · chrome. Only the
+   *  active pane is a mounted native view (the rest are snapshot tiles drawn by the surface), so the
+   *  stack stays simple — the surface receives every gesture except over the live pane, which owns
+   *  its own input (you interact with the focused page directly). */
   _restackCanvas() {
     const cv = this.win.contentView;
-    if (this.canvas.view) cv.addChildView(this.canvas.view, 0); // the surface sits beneath the panes
-    for (const t of this.tabs.tabs) if (t.id !== this.tabs.activeId) cv.addChildView(t.view.view);
-    const act = this.tabs.tabs.find((t) => t.id === this.tabs.activeId);
-    if (act) cv.addChildView(act.view.view); // the focused pane rises to the top of the stack
-    cv.addChildView(this.chrome.view);        // chrome always on top (overlays, WCO)
+    if (this.canvas.view) cv.addChildView(this.canvas.view, 0); // the surface sits beneath the live pane
+    if (this._activeView) cv.addChildView(this._activeView.view); // the live pane over the surface
+    cv.addChildView(this.chrome.view);                            // chrome always on top (overlays, WCO)
   }
 
   _connect() {
@@ -327,9 +329,10 @@ class PaneWindow {
   /* ── Infinite canvas (DESIGN §11 / CANVAS.md) ────────────────────────────────
      Canvas mode tiles every pane on one zoom-/pan-able surface instead of swapping one active tab.
      The window owns the Camera, the per-tab world rects, and the gesture math; the Canvas controller
-     owns only the surface view, and CanvasLayout does the tiling. v1 is static+zoom: drag the canvas
-     to pan, wheel to zoom, drag a pane's title bar to move it. Devtools docking and the rail are off
-     in canvas mode (they'd fight the surface for the region). */
+     owns only the surface view. Only the active pane stays a LIVE native view (with true setZoomFactor
+     zoom); the rest are frozen snapshot tiles the surface renders — so just one renderer is live.
+     Drag the canvas to pan, wheel to zoom, drag a pane's title bar to move it, click a tile to make it
+     live. Devtools docking and the rail are off in canvas mode (they'd fight the surface for the region). */
   setCanvasMode(on) {
     if (this.win.isDestroyed()) return;
     on = !!on;
@@ -347,8 +350,13 @@ class PaneWindow {
     } else {
       this.canvas.setEnabled(false);
       this._layout = this._tabLayout;
+      // Leaving canvas: undo the live pane's zoom and drop the (now-stale) tiles so tabs mode is clean.
+      for (const t of this.tabs.tabs) {
+        if (!t.view.webContents.isDestroyed()) { try { t.view.webContents.setZoomFactor(1); } catch { /* gone */ } }
+        t.view._snapshot = null;
+      }
     }
-    this._syncMountedViews(); // canvas: mount every pane (+ restack); tabs: the active view only
+    this._syncMountedViews(); // mount the active view (canvas restacks the surface under it)
     this._lastBounds = null;  // mode changed the whole region — force a full re-tile
     this.layout();
     this._sendLayoutState();
@@ -367,31 +375,62 @@ class PaneWindow {
     return { left: this.sidebar.width(), top, width, regionH: Math.max(0, height - top) };
   }
 
-  /** Panes adapted for CanvasLayout: a world rect + a setBounds that tiles the native page view. */
+  /** The single live pane (the active one) adapted for CanvasLayout: its world rect + a setBounds
+   *  that applies true zoom (setZoomFactor = camera scale) and tiles the native view. The other panes
+   *  aren't mounted — they're frozen snapshots the surface renders — so only one renderer is ever
+   *  live in canvas mode (the performance win, CANVAS.md §3). */
   _canvasPanes() {
-    return this.tabs.tabs
-      .filter((t) => t.world && !t.view.webContents.isDestroyed())
-      .map((t) => ({ world: t.world, setBounds: (r) => t.view.view.setBounds(r) }));
+    const scale = this._camera.scale;
+    const tab = this.tabs.tabs.find((t) => t.id === this.tabs.activeId);
+    if (!tab || !tab.world || tab.view.webContents.isDestroyed()) return [];
+    return [{
+      world: tab.world,
+      setBounds: (r) => {
+        try { tab.view.webContents.setZoomFactor(scale); } catch { /* destroyed mid-layout */ }
+        tab.view.view.setBounds(r);
+      },
+    }];
   }
 
-  /** Push the canvas frame state (camera + each pane's region-local clamped screen rect) to the
-   *  surface renderer. No-op outside canvas mode. */
+  /** Push the canvas state to the surface renderer: the camera scale + every pane's region-local
+   *  clamped screen rect, plus a frozen snapshot for the non-live panes (the active one is the live
+   *  native view, so it sends no snapshot — the surface leaves a hole there). No-op outside canvas. */
   _pushCanvas() {
     if (this._mode !== 'canvas') return;
     const region = this._region();
     const { left, top } = region;
+    const activeId = this.tabs.activeId;
     const panes = this.tabs.tabs.filter((t) => t.world).map((t) => {
       const abs = this._canvasLayout.screenRectFor(t.world, region); // absolute, clamped to the region
+      const active = t.id === activeId;
       return {
         id: t.id,
         title: t.title || 'New Tab',
         favicon: t.favicon || '',
-        active: t.id === this.tabs.activeId,
+        active,
         loading: !!t.loading,
+        snapshot: active ? null : (t.view._snapshot || null), // live pane shows through; others are tiles
         screen: { x: abs.x - left, y: abs.y - top, width: abs.width, height: abs.height }, // region-local
       };
     });
     this.canvas.send(CH.CANVAS_STATE, { on: true, scale: this._camera.scale, panes });
+  }
+
+  /** Freeze a pane to a snapshot (a downscaled data URL) so it keeps showing as a tile once it's no
+   *  longer the live pane. Captured at zoom 1 so the surface can scale it like a thumbnail; best-effort
+   *  (a never-painted background pane may capture blank → the surface falls back to a titled frame). */
+  _captureSnapshot(pageView) {
+    const wc = pageView.webContents;
+    if (!wc || wc.isDestroyed()) return;
+    try { wc.setZoomFactor(1); } catch { /* destroyed */ }
+    wc.capturePage().then((img) => {
+      if (wc.isDestroyed() || img.isEmpty()) return;
+      const max = 640; // cap the tile bitmap — a handful of panes shouldn't carry full-res PNGs
+      const { width } = img.getSize();
+      const scaled = width > max ? img.resize({ width: max }) : img;
+      pageView._snapshot = scaled.toDataURL();
+      this._pushCanvas();
+    }).catch(() => { /* capture can fail on an unmounted/navigating view — keep the last tile */ });
   }
 
   /** Re-tile the page views after a camera/world change and refresh the frames. */

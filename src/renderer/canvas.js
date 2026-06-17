@@ -1,11 +1,11 @@
 // The infinite-canvas renderer (DESIGN §11 roadmap — "many Pane instances float and arrange on one
-// surface"). Runs in its own WebContentsView (the "canvas view") filling the content region,
-// rendered BEHIND the live page views (separate native views floating on top at their own rects).
+// surface"). Runs in its own WebContentsView (the "canvas view") filling the content region.
 //
-// So this surface draws ONLY pane chrome — a 28px title bar above each pane and a 1px hairline ring
-// around the pane's page rect — and acts as the gesture surface for the empty canvas. The rect
-// interior is left empty (the native page shows through); we never paint opaque over it. Mirrors
-// sidebar.js: same bridge (window.pane), same dom/icons libs, same SAFE_FAVICON guard.
+// Frozen-tile model (CANVAS.md §5): only the ACTIVE pane is a live native view, floating on top of
+// this surface at its rect — there we draw chrome (title bar + ring) and leave the interior a hole
+// for the live page. Every OTHER pane is a frozen SNAPSHOT this surface renders as a scaled <img>,
+// so just one renderer is ever live. Clicking a tile (or its title bar) makes it the live pane.
+// Mirrors sidebar.js: same bridge (window.pane), same dom/icons libs, same SAFE_FAVICON guard.
 import { $, on } from './lib/dom.js';
 import { ICONS } from './lib/icons.js';
 
@@ -15,9 +15,10 @@ const SAFE_FAVICON = /^(?:https?|data):/i;
 const TITLE_H = 28; // title-bar height in fixed screen px, drawn ABOVE the page rect
 
 const root = $('#canvas');
-const els = new Map(); // pane id → { wrap, ring, titleBar, favicon, titleText, img } (diffed across renders)
+const els = new Map(); // pane id → { wrap, shot, ring, titleBar, favicon, titleText, img } (diffed across renders)
 
 let state = { on: false, scale: 1, panes: [] };
+let panMoved = false; // set while a pan drag moves, so the trailing click doesn't also raise a tile
 
 window.pane.onCanvasState((s) => {
   state = s || { on: false, scale: 1, panes: [] };
@@ -68,6 +69,11 @@ function createPane(id) {
   wrap.className = 'pane';
   wrap.dataset.id = id;
 
+  // The frozen snapshot tile (shown for non-active panes; the active pane is the live view, so its
+  // shot is hidden and the page shows through the hole). Scaled to the pane's screen rect.
+  const shot = document.createElement('div');
+  shot.className = 'pane-shot';
+
   const ring = document.createElement('div');
   ring.className = 'pane-ring';
 
@@ -86,13 +92,15 @@ function createPane(id) {
   close.innerHTML = ICONS.close;
 
   titleBar.append(favicon, titleText, close);
-  wrap.append(ring, titleBar);
+  wrap.append(shot, ring, titleBar);
   root.append(wrap);
 
-  const rec = { wrap, ring, titleBar, favicon, titleText, img: null, favKey: null };
+  const rec = { wrap, shot, ring, titleBar, favicon, titleText, img: null, favKey: null, shotKey: null };
 
   // Title-bar click raises/focuses the pane (DESIGN: blue marks the active one).
   on(titleBar, 'click', () => window.pane.canvasRaisePane(id));
+  // Clicking a frozen tile's body raises it too — but only a clean click, not the tail of a pan drag.
+  on(shot, 'click', () => { if (!panMoved) window.pane.canvasRaisePane(id); });
   // Close button — stop the raise click from also firing.
   on(close, 'click', (e) => { e.stopPropagation(); window.pane.closeTab(id); });
   // Title-bar pointer-drag moves the pane (screen-delta per move).
@@ -103,7 +111,8 @@ function createPane(id) {
 }
 
 // Position the chrome from the region-local PAGE rect: ring overlays the rect, title bar sits
-// directly above it ([x, y - TITLE_H], width × TITLE_H).
+// directly above it ([x, y - TITLE_H], width × TITLE_H), and the snapshot tile (non-active panes)
+// fills the rect.
 function position(rec, p, sc) {
   rec.wrap.classList.toggle('active', !!p.active);
   rec.wrap.classList.toggle('loading', !!p.loading);
@@ -117,11 +126,30 @@ function position(rec, p, sc) {
   rec.ring.style.width = `${sc.width}px`;
   rec.ring.style.height = `${sc.height}px`;
 
+  // The frozen tile: shown for non-active panes (the active pane is the live native view → no tile).
+  rec.shot.style.left = `${sc.x}px`;
+  rec.shot.style.top = `${sc.y}px`;
+  rec.shot.style.width = `${sc.width}px`;
+  rec.shot.style.height = `${sc.height}px`;
+  setShot(rec, p);
+
   const label = p.title || 'New Tab';
   if (rec.titleText.textContent !== label) rec.titleText.textContent = label;
   rec.titleBar.title = label;
 
   setFavicon(rec, p.favicon);
+}
+
+// Paint the frozen snapshot as a background-image (cheap to scale). Active pane → no tile (hole for
+// the live view); a pane with no snapshot yet → an empty placeholder (the ring + title still mark it).
+function setShot(rec, p) {
+  const key = !p.active && p.snapshot ? p.snapshot : null;
+  if (rec.shotKey !== key) {
+    rec.shotKey = key;
+    rec.shot.style.backgroundImage = key ? `url("${key}")` : 'none';
+  }
+  rec.shot.classList.toggle('hidden', !!p.active);
+  rec.shot.classList.toggle('empty', !p.active && !p.snapshot);
 }
 
 function setFavicon(rec, favicon) {
@@ -192,20 +220,22 @@ function initTitleDrag(titleBar, id) {
    double-click on empty space opens a new pane. */
 function initCanvasGestures() {
   let panning = false;
+  let captured = false;
   let px = 0;
   let py = 0;
 
   on(root, 'pointerdown', (e) => {
-    // Left-drag pans only from empty space; middle-mouse pans from anywhere (incl. title bars).
-    const onChrome = e.target.closest('.pane-title');
-    const start = (e.button === 1) || (e.button === 0 && !onChrome);
+    // Left-drag pans from empty space or a frozen tile body; middle-mouse pans from anywhere. Never
+    // start a pan from the title bar (that's the move handle). Capture is deferred to the first real
+    // move so a clean click still reaches the tile (→ raise).
+    const onTitle = e.target.closest('.pane-title');
+    const start = (e.button === 1) || (e.button === 0 && !onTitle);
     if (!start) return;
     panning = true;
+    captured = false;
+    panMoved = false;
     px = e.clientX;
     py = e.clientY;
-    root.classList.add('panning');
-    root.setPointerCapture(e.pointerId);
-    e.preventDefault();
   });
 
   on(root, 'pointermove', (e) => {
@@ -215,6 +245,8 @@ function initCanvasGestures() {
     if (dx === 0 && dy === 0) return;
     px = e.clientX;
     py = e.clientY;
+    panMoved = true;
+    if (!captured) { captured = true; root.classList.add('panning'); try { root.setPointerCapture(e.pointerId); } catch { /* unsupported */ } }
     window.pane.canvasPan(dx, dy);
   });
 
@@ -222,7 +254,7 @@ function initCanvasGestures() {
     if (!panning) return;
     panning = false;
     root.classList.remove('panning');
-    try { root.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    if (captured) { try { root.releasePointerCapture(e.pointerId); } catch { /* already released */ } captured = false; }
   };
   on(root, 'pointerup', end);
   on(root, 'pointercancel', end);
