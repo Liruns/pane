@@ -44,6 +44,7 @@ function registerIpc(getWindow) {
   handle(CH.TAB_DUPLICATE, (_e, id) => { const t = tabsOf(); if (t) t.duplicate(id); });
   handle(CH.TAB_CLOSE_OTHERS, (_e, id) => { const t = tabsOf(); if (t) t.closeOthers(id); });
   handle(CH.TAB_REOPEN, () => { const t = tabsOf(); if (t) t.reopenClosed(); });
+  handle(CH.SET_VERTICAL_TABS, (_e, on) => { const w = getWindow(); if (w) w.setVerticalTabs(!!on); });
 
   handle(CH.TOGGLE_MAXIMIZE, () => {
     const w = getWindow();

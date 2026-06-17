@@ -21,4 +21,11 @@ module.exports = {
     DEFAULT_RIGHT: 480,  // initial right-dock width
     DEFAULT_BOTTOM: 320, // initial bottom-dock height
   },
+  // Vertical tabs (DESIGN §11 Arc/Zen lineage) — a left rail hosting the tab list as a second
+  // WebContentsView, tiled left of the page like the devtools dock. Fixed width in v0; a draggable
+  // splitter is the follow-up. MIN_PAGE keeps the rail from starving the page on narrow windows.
+  SIDEBAR: {
+    WIDTH: 240,    // left-rail width
+    MIN_PAGE: 320, // never let the rail shrink the page below this
+  },
 };

@@ -54,26 +54,29 @@ class DevtoolsDock {
     return Math.max(minDock, Math.min(desired, maxDock));
   }
 
-  /** Tile page │ splitter │ host along the dock axis. Returns false when nothing is docked (the
-   *  caller fills the region with the page). Pure geometry — synchronous for resize integrity
-   *  (DESIGN §5); the page absorbs the resize while devtools keeps its clamped extent. */
-  layoutInto(page, { top, width, regionH }) {
+  /** Tile page │ splitter │ host along the dock axis, within the region starting at `left` (the
+   *  vertical-tabs rail's inset; 0 when off). Returns false when nothing is docked (the caller fills
+   *  the region with the page). Pure geometry — synchronous for resize integrity (DESIGN §5); the
+   *  page absorbs the resize while devtools keeps its clamped extent. The page never starts before
+   *  `left`, so the rail and the dock can never overlap. */
+  layoutInto(page, { left = 0, top, width, regionH }) {
     const host = this._dockedHost;
     const S = DEVTOOLS.SPLITTER;
+    const availW = Math.max(0, width - left); // region width after the rail inset
     if (this._dockSide === 'right' && host) {
-      const dockW = this._clampDock(this._dockSize.right, width);
-      const pageW = Math.max(0, width - dockW - S);
-      page.setBounds({ x: 0, y: top, width: pageW, height: regionH });
-      if (this._splitter) this._splitter.view.setBounds({ x: pageW, y: top, width: S, height: regionH });
-      host.setBounds({ x: pageW + S, y: top, width: dockW, height: regionH });
+      const dockW = this._clampDock(this._dockSize.right, availW);
+      const pageW = Math.max(0, availW - dockW - S);
+      page.setBounds({ x: left, y: top, width: pageW, height: regionH });
+      if (this._splitter) this._splitter.view.setBounds({ x: left + pageW, y: top, width: S, height: regionH });
+      host.setBounds({ x: left + pageW + S, y: top, width: dockW, height: regionH });
       return true;
     }
     if (this._dockSide === 'bottom' && host) {
       const dockH = this._clampDock(this._dockSize.bottom, regionH);
       const pageH = Math.max(0, regionH - dockH - S);
-      page.setBounds({ x: 0, y: top, width, height: pageH });
-      if (this._splitter) this._splitter.view.setBounds({ x: 0, y: top + pageH, width, height: S });
-      host.setBounds({ x: 0, y: top + pageH + S, width, height: dockH });
+      page.setBounds({ x: left, y: top, width: availW, height: pageH });
+      if (this._splitter) this._splitter.view.setBounds({ x: left, y: top + pageH, width: availW, height: S });
+      host.setBounds({ x: left, y: top + pageH + S, width: availW, height: dockH });
       return true;
     }
     return false;
@@ -227,9 +230,13 @@ class DevtoolsDock {
     const b = win.getContentBounds();
     // Pointer distance from the dock's OUTER edge = desired extent; _clampDock keeps the page's
     // MIN_PAGE so this agrees with layoutInto(). Screen coords make it immune to the splitter sliding
-    // under the cursor mid-drag, and to the window being moved during the drag.
+    // under the cursor mid-drag, and to the window being moved during the drag. The vertical-tabs
+    // rail (on the LEFT) doesn't move the right dock's outer edge, but it shrinks the region the
+    // page lives in, so the right-dock clamp span subtracts the rail inset — matching layoutInto's
+    // availW so the rendered and persisted sizes can't diverge (DESIGN §5).
+    const inset = this._host.getInset ? this._host.getInset() : 0;
     const next = this._dockSide === 'right'
-      ? this._clampDock((b.x + b.width) - x, b.width)
+      ? this._clampDock((b.x + b.width) - x, b.width - inset)
       : this._clampDock((b.y + b.height) - y, b.height - (CHROME_HEIGHT - 1));
     if (this._dockSize[this._dockSide] === next) return; // clamped to the same extent — skip the re-tile
     this._dockSize[this._dockSide] = next;

@@ -20,6 +20,7 @@ module.exports = {
   TAB_DUPLICATE: 'pane:tab-duplicate',
   TAB_CLOSE_OTHERS: 'pane:tab-close-others',
   TAB_REOPEN: 'pane:tab-reopen',
+  SET_VERTICAL_TABS: 'pane:set-vertical-tabs', // toggle the left-rail tab list (DESIGN §11)
   TOGGLE_MAXIMIZE: 'pane:toggle-maximize',
   SET_CHROME_HEIGHT: 'pane:set-chrome-height',
   HISTORY_QUERY: 'pane:history-query',
@@ -40,5 +41,6 @@ module.exports = {
   FOCUS_ADDRESS: 'pane:focus-address',
   OPEN_PALETTE: 'pane:open-palette',
   TABS_STATE: 'pane:tabs-state',
+  LAYOUT_STATE: 'pane:layout-state', // { verticalTabs } — chrome reflects rail on/off (menu check, body class)
   TOAST: 'pane:toast',
 };

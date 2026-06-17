@@ -33,6 +33,7 @@ function handlePageKey(tabs, e, input) {
   else if (mod && input.key === '-') { if (active) active.zoomBy(-0.5); e.preventDefault(); }
   else if (mod && input.key === '0') { if (active) active.resetZoom(); e.preventDefault(); }
   else if (mod && input.shift && key === 'i') { tabs.emit('devtools-toggle'); e.preventDefault(); }
+  else if (mod && input.shift && key === 'e') { tabs.emit('toggle-vertical-tabs'); e.preventDefault(); }
   else if (input.alt && input.key === 'ArrowLeft' && active && active.canGoBack()) { active.back(); e.preventDefault(); }
   else if (input.alt && input.key === 'ArrowRight' && active && active.canGoForward()) { active.forward(); e.preventDefault(); }
 }

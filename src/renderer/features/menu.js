@@ -5,6 +5,7 @@ import { openOverlay, closeOverlay } from '../lib/overlay.js';
 import { initMenuNav, focusFirstItem } from '../lib/menu-nav.js';
 
 let panel, btn;
+let verticalTabs = false; // mirrored from main via LAYOUT_STATE so the toggle shows the live state
 
 export function initMenu() {
   btn = $('#menu-btn');
@@ -16,6 +17,10 @@ export function initMenu() {
   panel.hidden = true;
   document.body.append(panel);
   initMenuNav(panel);
+
+  // Layout mode (vertical tabs on/off) is owned by main; keep the toggle in sync, and re-render if
+  // the menu is open when it flips (e.g. toggled via Ctrl+Shift+E while the menu is showing).
+  window.pane.onLayout((s) => { verticalTabs = !!s.verticalTabs; if (!panel.hidden) render(); });
 
   on(btn, 'click', (e) => { e.stopPropagation(); panel.hidden ? open() : close(); });
   on(window, 'mousedown', (e) => {
@@ -60,7 +65,28 @@ function render() {
   item('History', 'Ctrl+H', 'pane://history/');
   item('Downloads', 'Ctrl+J', 'pane://downloads/');
   sep();
+  toggle('Vertical tabs', verticalTabs, () => window.pane.setVerticalTabs(!verticalTabs));
+  sep();
   item('Settings', 'Ctrl+,', 'pane://settings/');
+}
+
+// A menu row that flips a boolean — rendered with the iOS-style switch (DESIGN §4 toggle grammar).
+// role=menuitemcheckbox + aria-checked carries the state to assistive tech (menu-nav roves it too).
+function toggle(label, active, fn) {
+  const row = document.createElement('div');
+  row.className = 'm-row toggle' + (active ? ' checked' : '');
+  row.setAttribute('role', 'menuitemcheckbox');
+  row.setAttribute('aria-checked', active ? 'true' : 'false');
+  row.tabIndex = -1;
+  const lab = document.createElement('span');
+  lab.className = 'm-label';
+  lab.textContent = label;
+  const sw = document.createElement('span');
+  sw.className = 'm-switch';
+  sw.setAttribute('aria-hidden', 'true');
+  row.append(lab, sw);
+  on(row, 'click', () => { fn(); close(); });
+  panel.append(row);
 }
 
 // A menu row that runs a callback instead of navigating (e.g. the collapsed DevTools toggle).

@@ -5,6 +5,7 @@ const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
 const TabManager = require('./tab-manager');
 const DevtoolsDock = require('./devtools-dock');
+const Sidebar = require('./sidebar');
 const { handlePageKey } = require('./shortcuts');
 const settings = require('./settings');
 const session = require('./session');
@@ -62,7 +63,15 @@ class PaneWindow {
       getActiveView: () => this._activeView,
       relayout: () => { this._lastBounds = null; this.layout(); },
       sendState: (payload) => { if (!this.win.isDestroyed()) this.chrome.send(CH.DEVTOOLS_STATE, payload); },
+      // The dock tiles within the region right of the vertical-tabs rail; getInset() is the rail's
+      // current width so a splitter drag clamps against the same span layout() does (DESIGN §5).
+      getInset: () => this.sidebar.width(),
     });
+
+    // Vertical tabs (DESIGN §11) — a left rail hosting the tab list as a second WebContentsView,
+    // tiled left of the page like the devtools dock. Off by default; restored on chrome load below.
+    this.sidebar = new Sidebar({ win: this.win, refreshTabs: () => this.tabs.refresh() });
+    this._verticalTabs = !!settings.get('verticalTabs');
 
     this.win.contentView.addChildView(this.chrome.view);
     this._connect();
@@ -82,7 +91,7 @@ class PaneWindow {
     this.win.on('moved', () => this._saveSession());
     // Take any detached devtools windows + per-tab hosts down with the main window. The OS 'X' fires
     // 'closed' without routing through TabManager teardown, so the dock retires them explicitly.
-    this.win.on('closed', () => this.dock.handleWindowClosed(this.tabs.tabs));
+    this.win.on('closed', () => { this.dock.handleWindowClosed(this.tabs.tabs); this.sidebar.destroy(); });
 
     // DESIGN §14: when the app loses focus the chrome goes inert (a subtle muted shift, matching
     // native Win11 inactive-window behavior). The renderer applies the visual; main just reports state.
@@ -90,8 +99,12 @@ class PaneWindow {
     this.win.on('blur', () => this._sendActive(false));
 
     this.chrome.webContents.once('did-finish-load', () => {
+      // Restore the rail (if persisted on) and tell the chrome which mode it's in, so the top strip
+      // hides and the menu toggle reflects reality from the first paint.
+      if (this._verticalTabs) this.setVerticalTabs(true);
+      else this.chrome.send(CH.LAYOUT_STATE, { verticalTabs: false });
       this.tabs.refresh();
-      this._sendActive(this.win.isFocused()); // sync initial state once the toolbar is listening
+      this._sendActive(this.win.isFocused()); // sync initial inert state once the toolbar is listening
     });
   }
 
@@ -141,10 +154,13 @@ class PaneWindow {
 
     const top = CHROME_HEIGHT - 1; // 1px overlap hides the seam (DESIGN §5)
     const regionH = Math.max(0, height - top);
+    // The vertical-tabs rail (when on) takes the region's left edge; the page region starts after it.
+    const left = this.sidebar.layout({ top, regionH, width });
     const page = this._activeView.view;
-    // When devtools is docked the dock tiles page │ splitter │ host; otherwise the page fills.
-    if (!this.dock.layoutInto(page, { top, width, regionH })) {
-      page.setBounds({ x: 0, y: top, width, height: regionH });
+    // When devtools is docked the dock tiles page │ splitter │ host within [left, width); otherwise
+    // the page fills the post-rail region.
+    if (!this.dock.layoutInto(page, { left, top, width, regionH })) {
+      page.setBounds({ x: left, y: top, width: width - left, height: regionH });
     }
   }
 
@@ -186,6 +202,7 @@ class PaneWindow {
     // re-sync the toolbar's icon + dock indicator. The boolean is ignored; placement is the truth.
     tabs.on('devtools', () => this.dock.refresh());
     tabs.on('devtools-toggle', () => this.dock.toggle()); // Ctrl+Shift+I (page focus)
+    tabs.on('toggle-vertical-tabs', () => this.setVerticalTabs(!this.sidebar.enabled)); // Ctrl+Shift+E
     tabs.on('tab-closed', (view) => this.dock.teardown(view));
     tabs.on('nav-state', (state) => chrome.send(CH.NAV_STATE, state));
     tabs.on('load-error', (err) => chrome.send(CH.LOAD_ERROR, err));
@@ -203,6 +220,7 @@ class PaneWindow {
     tabs.on('open-external', (url) => { if (/^https?:/i.test(url)) shell.openExternal(url); });
     tabs.on('tabs', (state) => {
       chrome.send(CH.TABS_STATE, state);
+      this.sidebar.send(CH.TABS_STATE, state); // the rail mirrors the top strip (no-op until enabled)
       this._saveSession();
       if (win.isDestroyed()) return;
       const a = state.tabs.find((t) => t.id === state.activeId);
@@ -218,6 +236,29 @@ class PaneWindow {
   onSplitterDrag(x, y) { this.dock.onSplitterDrag(x, y); }
   onSplitterDragEnd() { this.dock.onSplitterDragEnd(); }
 
+  /* ── Vertical tabs (DESIGN §11) ──────────────────────────────────────────────
+     Toggle the left rail on/off: persist the choice, attach/detach the rail view, re-tile so the
+     page region insets/un-insets, and tell the chrome renderer (it hides the top strip + checks the
+     menu toggle off the LAYOUT_STATE push). Page-region math stays in layout(); the rail owns only
+     its own bounds + inset width. */
+  setVerticalTabs(on) {
+    if (this.win.isDestroyed()) return;
+    on = !!on;
+    this._verticalTabs = on;
+    settings.set('verticalTabs', on);
+    // If the rail being removed currently holds keyboard focus, re-home it to the page — otherwise
+    // focus is orphaned on the detached view and the next before-input-event shortcut (Ctrl+Tab …)
+    // lands on no webContents (mirrors the tab-switch focus guard in _setActiveView).
+    const rehome = !on && this.sidebar.isFocused();
+    this.sidebar.setEnabled(on);
+    if (rehome && this._activeView && !this._activeView.webContents.isDestroyed()) {
+      this._activeView.webContents.focus();
+    }
+    this._lastBounds = null; // region width changed — force a full re-tile
+    this.layout();
+    this.chrome.send(CH.LAYOUT_STATE, { verticalTabs: on });
+  }
+
   /** IPC trust boundary (defense-in-depth): only this window's own chrome (toolbar) and splitter
    *  views may drive the window.pane / splitter channels. Page/web views get the scoped
    *  `paneInternal` bridge (re-validated in internal-ipc) and no raw ipcRenderer, so they can't reach
@@ -231,6 +272,9 @@ class PaneWindow {
   isTrustedChromeSender(wc) {
     if (this.win.isDestroyed() || !wc) return false;
     if (wc === this.chrome.webContents) return true;
+    // The vertical-tabs rail is privileged chrome (same preload as the toolbar) — it drives the
+    // tab channels (activate/close/new/move), so it must be trusted alongside the chrome + splitter.
+    if (this.sidebar.isSender(wc)) return true;
     return this.dock.isSplitterSender(wc);
   }
 }

@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('pane', {
   duplicateTab: (id) => ipcRenderer.invoke(CH.TAB_DUPLICATE, id),
   closeOtherTabs: (id) => ipcRenderer.invoke(CH.TAB_CLOSE_OTHERS, id),
   reopenClosedTab: () => ipcRenderer.invoke(CH.TAB_REOPEN),
+  setVerticalTabs: (on) => ipcRenderer.invoke(CH.SET_VERTICAL_TABS, on),
   toggleMaximize: () => ipcRenderer.invoke(CH.TOGGLE_MAXIMIZE),
   setChromeHeight: (h) => ipcRenderer.invoke(CH.SET_CHROME_HEIGHT, h),
   queryHistory: (input) => ipcRenderer.invoke(CH.HISTORY_QUERY, input),
@@ -43,5 +44,6 @@ contextBridge.exposeInMainWorld('pane', {
   onFocusAddress: (cb) => ipcRenderer.on(CH.FOCUS_ADDRESS, () => cb()),
   onOpenPalette: (cb) => ipcRenderer.on(CH.OPEN_PALETTE, (_e, d) => cb(d)),
   onTabs: (cb) => ipcRenderer.on(CH.TABS_STATE, (_e, d) => cb(d)),
+  onLayout: (cb) => ipcRenderer.on(CH.LAYOUT_STATE, (_e, d) => cb(d)),
   onToast: (cb) => ipcRenderer.on(CH.TOAST, (_e, m) => cb(m)),
 });

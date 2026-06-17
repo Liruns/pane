@@ -79,3 +79,9 @@
 .tab .close svg { width: 12px; height: 12px; }
 
 #newtab { flex: none; }
+
+/* Vertical-tabs mode: the left rail (a separate WebContentsView) hosts the tab list, so the top
+   strip's tabs + new-tab button hide. The #tabstrip row stays — it still reserves the native
+   window-controls gap and provides the window-drag region (DESIGN §8). */
+body.vertical-tabs #tabs,
+body.vertical-tabs #newtab { display: none; }
