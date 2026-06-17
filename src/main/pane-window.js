@@ -17,6 +17,13 @@ const { handlePageKey } = require('./shortcuts');
 const settings = require('./settings');
 const session = require('./session');
 
+// Canvas input hardening: a glitchy/compromised surface renderer must never poison the camera or a
+// pane's world rect with NaN/Infinity — a non-finite value would break every world↔screen transform
+// AND get written to the persisted session (a permanently broken restore). Guard at the boundary.
+const FIN = Number.isFinite;
+const CANVAS_EDGES = new Set(['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw']);
+const validWorld = (r) => !!r && FIN(r.x) && FIN(r.y) && FIN(r.width) && FIN(r.height) && r.width > 0 && r.height > 0;
+
 /** Clamp saved window bounds onto a currently-connected display so a window restored from a
  *  now-disconnected monitor (or a changed layout) can't open fully off-screen. */
 function clampToDisplay(b) {
@@ -154,10 +161,13 @@ class PaneWindow {
     // arrangement (CANVAS.md persistence). canvasMode itself comes from settings, applied on load.
     const canvas = restore && restore.canvas;
     if (canvas) {
+      // Validate before applying — a corrupted/hand-edited session must not seed a NaN world rect or
+      // camera pose that then breaks every transform (and re-persists itself).
       if (Array.isArray(canvas.worlds)) {
-        this.tabs.tabs.forEach((t, i) => { if (canvas.worlds[i]) t.world = canvas.worlds[i]; });
+        this.tabs.tabs.forEach((t, i) => { if (validWorld(canvas.worlds[i])) t.world = canvas.worlds[i]; });
       }
-      if (canvas.camera) this._camera.set(canvas.camera);
+      const c = canvas.camera;
+      if (c && FIN(c.x) && FIN(c.y) && FIN(c.scale)) this._camera.set(c);
     }
   }
 
@@ -562,19 +572,19 @@ class PaneWindow {
   /* Gesture handlers (canvas → main, forwarded by ipc.js). All no-op outside canvas mode; a direct
      gesture cancels any in-flight camera tween so the user's input wins immediately. */
   onCanvasPan(dx, dy) {
-    if (this._mode !== 'canvas') return;
+    if (this._mode !== 'canvas' || !FIN(dx) || !FIN(dy)) return;
     this._cancelTween();
     this._camera.panBy(dx, dy);
     this._canvasRelayout();
   }
   onCanvasZoom(factor, ax, ay) {
-    if (this._mode !== 'canvas') return;
+    if (this._mode !== 'canvas' || !FIN(factor) || factor <= 0 || !FIN(ax) || !FIN(ay)) return;
     this._cancelTween();
     this._camera.zoomBy(factor, ax, ay);
     this._canvasRelayout();
   }
   onCanvasPaneMove(id, dx, dy) {
-    if (this._mode !== 'canvas') return;
+    if (this._mode !== 'canvas' || !FIN(dx) || !FIN(dy)) return;
     this._cancelTween();
     this._cancelPaneTween(); // a fresh grab cancels a pane still settling from a previous fling
     const t = this.tabs.tabs.find((x) => x.id === id);
@@ -585,7 +595,7 @@ class PaneWindow {
     this._canvasRelayout();
   }
   onCanvasPaneResize(id, edge, dx, dy) {
-    if (this._mode !== 'canvas') return;
+    if (this._mode !== 'canvas' || !CANVAS_EDGES.has(edge) || !FIN(dx) || !FIN(dy)) return;
     this._cancelTween();
     this._cancelPaneTween();
     const t = this.tabs.tabs.find((x) => x.id === id);
@@ -597,7 +607,7 @@ class PaneWindow {
   /** Release velocity of a pane drag (screen px/ms) → glide on with a spring overshoot to rest
    *  (DESIGN §15 gesture motion). Skipped under reduced motion or below a flick threshold. */
   onCanvasPaneFling(id, vx, vy) {
-    if (this._mode !== 'canvas' || this._reduceMotion) return;
+    if (this._mode !== 'canvas' || this._reduceMotion || !FIN(vx) || !FIN(vy)) return;
     if (Math.hypot(vx, vy) < 0.05) return; // too slow to be a throw
     const t = this.tabs.tabs.find((x) => x.id === id);
     if (!t || !t.world) return;
@@ -625,7 +635,7 @@ class PaneWindow {
   _cancelPaneTween() { if (this._paneTween) { clearInterval(this._paneTween); this._paneTween = null; } }
   /** Center the camera on a world point (the minimap click/drag-to-navigate), keeping zoom. */
   centerCanvasOn(wx, wy) {
-    if (this._mode !== 'canvas') return;
+    if (this._mode !== 'canvas' || !FIN(wx) || !FIN(wy)) return;
     this._cancelTween();
     const { left, width, regionH } = this._region();
     const s = this._camera.scale;
