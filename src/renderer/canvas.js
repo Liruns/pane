@@ -47,9 +47,33 @@ const HANDLES = [
 
 const root = $('#canvas');
 const els = new Map(); // pane id → { wrap, shot, ring, titleBar, favicon, titleText, img } (diffed across renders)
+// Frozen-tile bitmaps (pane id → data: URL). Decoupled from per-frame CANVAS_STATE: snapshots arrive
+// on their own onCanvasSnapshot channel only when they change, so the per-frame state stays light.
+const shots = new Map();
 
 let state = { on: false, scale: 1, camera: { x: 0, y: 0, scale: 1 }, panes: [] };
 let panMoved = false; // set while a pan drag moves, so the trailing click doesn't also raise a tile
+
+// The canvas IS the gesture surface DESIGN §15 reserved spring/inertia for. Pan momentum is real
+// physics (friction decay), not a chrome ease — but only when the OS isn't asking to reduce motion.
+const motionMQ = matchMedia('(prefers-reduced-motion: reduce)');
+let reduceMotion = motionMQ.matches;
+
+// Pan-inertia tuning (§15 momentum). Velocities are px/ms; friction is a per-16ms decay factor,
+// framerate-normalized each frame so it feels the same at any refresh rate.
+const INERTIA_MIN_START = 0.05; // px/ms — below this on release, the drag just stops (no glide)
+const INERTIA_MIN_STOP = 0.02;  // px/ms — the glide ends once it slows past this
+const INERTIA_FRICTION = 0.93;  // decay per ~16ms frame
+let inertiaRAF = 0; // active inertia rAF id (0 = none)
+
+// Cancel any running pan-momentum glide. Called at the top of every gesture that should interrupt
+// it: a new pan/title/handle/minimap pointerdown, a wheel, or any handled keydown.
+function cancelInertia() {
+  if (inertiaRAF) {
+    cancelAnimationFrame(inertiaRAF);
+    inertiaRAF = 0;
+  }
+}
 
 const hud = buildHud(); // bottom-right control cluster — a sibling of #canvas so its clicks don't pan
 const minimap = buildMinimap(); // top-right overview navigator — also a sibling of #canvas
@@ -63,11 +87,28 @@ window.pane.onCanvasState((s) => {
     return;
   }
   hud.el.classList.remove('hidden');
-  minimap.el.classList.remove('hidden');
+  updateMinimapVisibility();
   updateGrid(state.camera);
   hud.setZoom(state.scale);
   render(state.panes || []);
   minimap.update(state);
+});
+
+// Frozen-tile bitmaps arrive here (only when they change), not in per-frame CANVAS_STATE. Store the
+// dataURL and, if the pane is currently mounted, re-apply its tile so the new bitmap shows at once.
+window.pane.onCanvasSnapshot(({ id, snapshot }) => {
+  shots.set(id, snapshot);
+  const rec = els.get(id);
+  if (rec) setShot(rec, rec.pane);
+});
+
+// Report the surface's reduced-motion preference to main (it gates motion main-side too), and keep
+// it current if the OS setting flips mid-session. reduceMotion also gates pan inertia locally (§15).
+window.pane.setCanvasPrefs({ reduceMotion });
+on(motionMQ, 'change', (e) => {
+  reduceMotion = e.matches;
+  if (reduceMotion) cancelInertia();
+  window.pane.setCanvasPrefs({ reduceMotion });
 });
 
 initCanvasGestures();
@@ -92,11 +133,12 @@ function render(panes) {
     position(rec, p, sc);
   }
 
-  // Drop panes that are gone (closed) or fell off-region.
+  // Drop panes that are gone (closed) or fell off-region — also forget any stored snapshot bitmap.
   for (const [id, rec] of els) {
     if (!seen.has(id)) {
       rec.wrap.remove();
       els.delete(id);
+      shots.delete(id);
     }
   }
 }
@@ -104,6 +146,7 @@ function render(panes) {
 function clear() {
   for (const rec of els.values()) rec.wrap.remove();
   els.clear();
+  shots.clear();
 }
 
 function createPane(id) {
@@ -150,7 +193,7 @@ function createPane(id) {
 
   root.append(wrap);
 
-  const rec = { wrap, shot, ring, titleBar, favicon, titleText, handles, img: null, favKey: null, shotKey: null };
+  const rec = { wrap, shot, ring, titleBar, favicon, titleText, handles, img: null, favKey: null, shotKey: null, pane: null };
 
   // Title-bar click raises/focuses the pane (DESIGN: blue marks the active one).
   on(titleBar, 'click', () => window.pane.canvasRaisePane(id));
@@ -169,6 +212,7 @@ function createPane(id) {
 // directly above it ([x, y - TITLE_H], width × TITLE_H), and the snapshot tile (non-active panes)
 // fills the rect.
 function position(rec, p, sc) {
+  rec.pane = p; // remember the latest pane object so an out-of-band snapshot can re-run setShot
   rec.wrap.classList.toggle('active', !!p.active);
   rec.wrap.classList.toggle('loading', !!p.loading);
   // Zoomed far out, a tile is too small to read chrome — hide its title bar (keep ring + shot).
@@ -237,16 +281,19 @@ function positionHandles(handles, sc) {
   }
 }
 
-// Paint the frozen snapshot as a background-image (cheap to scale). Active pane → no tile (hole for
+// Paint the frozen snapshot as a background-image (cheap to scale). The bitmap is looked up from the
+// `shots` map (it arrives out-of-band on onCanvasSnapshot, not in p). Active pane → no tile (hole for
 // the live view); a pane with no snapshot yet → an empty placeholder (the ring + title still mark it).
 function setShot(rec, p) {
-  const key = !p.active && p.snapshot ? p.snapshot : null;
+  if (!p) return;
+  const shot = shots.get(p.id) || null;
+  const key = !p.active && shot ? shot : null;
   if (rec.shotKey !== key) {
     rec.shotKey = key;
     rec.shot.style.backgroundImage = key ? `url("${key}")` : 'none';
   }
   rec.shot.classList.toggle('hidden', !!p.active);
-  rec.shot.classList.toggle('empty', !p.active && !p.snapshot);
+  rec.shot.classList.toggle('empty', !p.active && !shot);
 }
 
 function setFavicon(rec, favicon) {
@@ -279,6 +326,7 @@ function initTitleDrag(titleBar, id) {
   on(titleBar, 'pointerdown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('.close')) return; // the close button isn't a drag handle
+    cancelInertia(); // grabbing a pane interrupts any camera glide
     dragging = true;
     moved = false;
     px = e.clientX;
@@ -325,6 +373,7 @@ function initHandleDrag(handle, id, edge) {
     if (e.button !== 0) return;
     e.stopPropagation(); // don't let the canvas pan logic see this
     e.preventDefault();
+    cancelInertia(); // a resize interrupts any camera glide
     dragging = true;
     px = e.clientX;
     py = e.clientY;
@@ -360,6 +409,11 @@ function initCanvasGestures() {
   let captured = false;
   let px = 0;
   let py = 0;
+  // Velocity tracking for the release glide (§15). vx/vy are EMA-smoothed px/ms; lastT is the last
+  // pointermove timestamp so we can divide the delta by the real frame gap.
+  let vx = 0;
+  let vy = 0;
+  let lastT = 0;
 
   on(root, 'pointerdown', (e) => {
     // Left-drag pans from empty space or a frozen tile body; middle-mouse pans from anywhere. Never
@@ -368,11 +422,15 @@ function initCanvasGestures() {
     const onTitle = e.target.closest('.pane-title');
     const start = (e.button === 1) || (e.button === 0 && !onTitle);
     if (!start) return;
+    cancelInertia(); // a fresh grab stops any glide in flight
     panning = true;
     captured = false;
     panMoved = false;
     px = e.clientX;
     py = e.clientY;
+    vx = 0;
+    vy = 0;
+    lastT = e.timeStamp;
   });
 
   on(root, 'pointermove', (e) => {
@@ -383,6 +441,13 @@ function initCanvasGestures() {
     px = e.clientX;
     py = e.clientY;
     panMoved = true;
+    // Track velocity (px/ms), lightly EMA-smoothed so a single jittery sample can't fling the glide.
+    const dt = e.timeStamp - lastT;
+    lastT = e.timeStamp;
+    if (dt > 0) {
+      vx = 0.7 * vx + 0.3 * (dx / dt);
+      vy = 0.7 * vy + 0.3 * (dy / dt);
+    }
     if (!captured) { captured = true; root.classList.add('panning'); try { root.setPointerCapture(e.pointerId); } catch { /* unsupported */ } }
     window.pane.canvasPan(dx, dy);
   });
@@ -392,14 +457,39 @@ function initCanvasGestures() {
     panning = false;
     root.classList.remove('panning');
     if (captured) { try { root.releasePointerCapture(e.pointerId); } catch { /* already released */ } captured = false; }
+    // Fling the camera on release: the §15 momentum gesture. Only when the drag actually moved, the
+    // OS isn't reducing motion, and the throw was fast enough to read as intentional.
+    if (panMoved && !reduceMotion && Math.hypot(vx, vy) > INERTIA_MIN_START) startInertia(vx, vy);
   };
   on(root, 'pointerup', end);
   on(root, 'pointercancel', end);
+
+  // The momentum glide: each frame, advance the camera by velocity × the real frame gap and decay
+  // the velocity by friction (framerate-normalized), stopping once it slows past INERTIA_MIN_STOP.
+  function startInertia(ivx, ivy) {
+    cancelInertia();
+    let gvx = ivx;
+    let gvy = ivy;
+    let prev = performance.now();
+    const step = (now) => {
+      const dtFrame = now - prev;
+      prev = now;
+      window.pane.canvasPan(gvx * dtFrame, gvy * dtFrame);
+      // Normalize the per-16ms friction to this frame's actual duration.
+      const decay = Math.pow(INERTIA_FRICTION, dtFrame / 16);
+      gvx *= decay;
+      gvy *= decay;
+      if (Math.hypot(gvx, gvy) < INERTIA_MIN_STOP) { inertiaRAF = 0; return; }
+      inertiaRAF = requestAnimationFrame(step);
+    };
+    inertiaRAF = requestAnimationFrame(step);
+  }
 
   // Plain wheel PANS the camera; Ctrl/Cmd+wheel ZOOMS about the cursor (region-local offset).
   // Steady factor — felt, not faked. Always preventDefault so the page never scrolls.
   on(root, 'wheel', (e) => {
     e.preventDefault();
+    cancelInertia(); // a wheel intent interrupts a glide
     if (e.ctrlKey || e.metaKey) {
       const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
       window.pane.canvasZoom(factor, e.offsetX, e.offsetY);
@@ -417,6 +507,18 @@ function initCanvasGestures() {
       window.pane.newTab();
     }
   });
+}
+
+/* ── Minimap visibility ───────────────────────────────────────────────────────
+   The minimap shows only when canvas mode is on AND the viewport region is large enough to be worth
+   a navigator — on a small region it would crowd the page, so it auto-hides (the bottom-right zoom
+   HUD stays). The region comes from CANVAS_STATE; thresholds below the responsive floor (DESIGN §8). */
+const MINIMAP_MIN_W = 480;
+const MINIMAP_MIN_H = 360;
+function updateMinimapVisibility() {
+  const region = state.region || { width: 0, height: 0 };
+  const tooSmall = region.width < MINIMAP_MIN_W || region.height < MINIMAP_MIN_H;
+  minimap.el.classList.toggle('hidden', !state.on || tooSmall);
 }
 
 /* ── Dot-grid background ──────────────────────────────────────────────────────
@@ -600,6 +702,7 @@ function buildMinimap() {
     if (e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
+    cancelInertia(); // a minimap navigation interrupts any camera glide
     dragging = true;
     inner.setPointerCapture(e.pointerId);
     navigate(e);
@@ -629,6 +732,11 @@ function initKeyboard() {
     if (e.metaKey || e.ctrlKey || e.altKey) return; // leave OS / app accelerators alone
     const t = e.target;
     if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+
+    // Any key we actually act on interrupts a camera glide (§15). Keys that fall through to the
+    // default no-op below don't touch the camera, so they leave an in-flight glide alone.
+    const HANDLED = new Set(['+', '=', '-', '0', 'f', 'F', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Escape']);
+    if (HANDLED.has(e.key)) cancelInertia();
 
     const cx = window.innerWidth / 2;
     const cy = window.innerHeight / 2;
