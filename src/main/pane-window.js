@@ -265,10 +265,10 @@ class PaneWindow {
    *  the chrome lane — but ipc.js validates every sender through here so the lane never trusts a
    *  stray view (a compromised/embedded frame, a future extra view) by default.
    *
-   *  Single-window assumption: ipc.js resolves the window via `getWindow()` (today the one live
-   *  window), so this gate validates against that window's views. The multi-window / canvas future
-   *  must route each message to the *sender's* window before gating — not the current one — or a
-   *  second window's legit chrome would be dropped here. v0 has one window, so this is correct now. */
+   *  Per-sender routing: ipc.js resolves the window via `windows.fromSender(sender)` (which calls
+   *  owns() below), so this gate validates against the *sender's own* window — the canvas/multi-window
+   *  groundwork (DESIGN §11). With one window it resolves to that window; with several, a second
+   *  window's legit chrome routes to — and is trusted by — its own window, not "the current" one. */
   isTrustedChromeSender(wc) {
     if (this.win.isDestroyed() || !wc) return false;
     if (wc === this.chrome.webContents) return true;
@@ -276,6 +276,23 @@ class PaneWindow {
     // tab channels (activate/close/new/move), so it must be trusted alongside the chrome + splitter.
     if (this.sidebar.isSender(wc)) return true;
     return this.dock.isSplitterSender(wc);
+  }
+
+  /** Does `wc` belong to this window? Used by the registry (windows.fromSender) to route IPC to the
+   *  sender's window — the multi-window / canvas story (DESIGN §11). Broader than
+   *  isTrustedChromeSender, which gates the *trusted chrome lane* specifically: owns() also matches
+   *  the page views (and their devtools hosts) so the internal-page lane (window.paneInternal) routes
+   *  to the right window too. Routing ≠ trust — each lane still re-gates (chrome via
+   *  isTrustedChromeSender, pages via internal-ipc's fromInternal). */
+  owns(wc) {
+    if (this.win.isDestroyed() || !wc) return false;
+    if (this.isTrustedChromeSender(wc)) return true; // chrome + sidebar rail + devtools splitter
+    for (const t of this.tabs.tabs) {
+      if (t.view.webContents === wc) return true;          // a tab's page view
+      const dt = t.view.devtoolsView;                      // …or its (lazy) devtools host
+      if (dt && !dt.webContents.isDestroyed() && dt.webContents === wc) return true;
+    }
+    return false;
   }
 }
 
