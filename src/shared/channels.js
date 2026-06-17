@@ -36,6 +36,7 @@ module.exports = {
   DEVTOOLS_STATE: 'pane:devtools-state', // { open, dock: 'right'|'bottom'|'detach'|null }
   SPLITTER_ORIENTATION: 'pane:splitter-orientation', // main → splitter ('col' | 'row')
   LOAD_ERROR: 'pane:load-error',
+  WINDOW_ACTIVE: 'pane:window-active', // { active } — window focus/blur → chrome inert shift (DESIGN §14)
   FOCUS_ADDRESS: 'pane:focus-address',
   TABS_STATE: 'pane:tabs-state',
   TOAST: 'pane:toast',
