@@ -6,6 +6,7 @@ import { initMenuNav, focusFirstItem } from '../lib/menu-nav.js';
 
 let panel, btn;
 let verticalTabs = false; // mirrored from main via LAYOUT_STATE so the toggle shows the live state
+let canvasMode = false;   // ditto — the infinite-canvas toggle reflects main's live mode
 
 export function initMenu() {
   btn = $('#menu-btn');
@@ -20,7 +21,11 @@ export function initMenu() {
 
   // Layout mode (vertical tabs on/off) is owned by main; keep the toggle in sync, and re-render if
   // the menu is open when it flips (e.g. toggled via Ctrl+Shift+E while the menu is showing).
-  window.pane.onLayout((s) => { verticalTabs = !!s.verticalTabs; if (!panel.hidden) render(); });
+  window.pane.onLayout((s) => {
+    verticalTabs = !!s.verticalTabs;
+    canvasMode = !!s.canvasMode;
+    if (!panel.hidden) render();
+  });
 
   on(btn, 'click', (e) => { e.stopPropagation(); panel.hidden ? open() : close(); });
   on(window, 'mousedown', (e) => {
@@ -66,6 +71,7 @@ function render() {
   item('Downloads', 'Ctrl+J', 'pane://downloads/');
   sep();
   toggle('Vertical tabs', verticalTabs, () => window.pane.setVerticalTabs(!verticalTabs));
+  toggle('Canvas (beta)', canvasMode, () => window.pane.setCanvasMode(!canvasMode));
   sep();
   item('Settings', 'Ctrl+,', 'pane://settings/');
 }

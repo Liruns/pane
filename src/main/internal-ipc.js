@@ -12,12 +12,14 @@ const fromInternal = (event) => {
   try { return new URL(event.senderFrame.url).protocol === 'pane:'; } catch { return false; }
 };
 
-function registerInternalIpc(getWindow) {
-  const active = () => { const w = getWindow(); return w && w.tabs ? w.tabs.active : null; };
+function registerInternalIpc(resolveWindow) {
+  // Route to the *sender's* window (the page issuing the command), not a single "current" one —
+  // the multi-window / canvas groundwork (DESIGN §11). With one window this resolves to it.
+  const active = (e) => { const w = resolveWindow(e.sender); return w && w.tabs ? w.tabs.active : null; };
 
   ipcMain.handle('pane-internal:navigate', (e, url) => {
     if (!fromInternal(e)) return;
-    const p = active();
+    const p = active(e);
     if (p) p.navigate(url);
   });
 
@@ -44,7 +46,7 @@ function registerInternalIpc(getWindow) {
   ipcMain.handle('pane-internal:downloads-clear', (e) => { if (fromInternal(e)) downloads.clearCompleted(); });
 
   // "Proceed anyway" from the cert error page: trust this host for the active tab, then it reloads.
-  ipcMain.handle('pane-internal:cert-allow', (e, host) => { if (fromInternal(e)) { const p = active(); if (p) p.allowCert(host); } });
+  ipcMain.handle('pane-internal:cert-allow', (e, host) => { if (fromInternal(e)) { const p = active(e); if (p) p.allowCert(host); } });
 }
 
 module.exports = { registerInternalIpc, fromInternal };

@@ -24,6 +24,24 @@ contextBridge.exposeInMainWorld('pane', {
   closeOtherTabs: (id) => ipcRenderer.invoke(CH.TAB_CLOSE_OTHERS, id),
   reopenClosedTab: () => ipcRenderer.invoke(CH.TAB_REOPEN),
   setVerticalTabs: (on) => ipcRenderer.invoke(CH.SET_VERTICAL_TABS, on),
+
+  // infinite canvas (DESIGN §11 / CANVAS.md). High-frequency gestures use send (no per-move ack);
+  // mode + raise use invoke. Main owns the camera + world rects and pushes CANVAS_STATE back.
+  setCanvasMode: (on) => ipcRenderer.invoke(CH.SET_CANVAS_MODE, on),
+  canvasPan: (dx, dy) => ipcRenderer.send(CH.CANVAS_PAN, dx, dy),
+  canvasZoom: (factor, ax, ay) => ipcRenderer.send(CH.CANVAS_ZOOM, factor, ax, ay),
+  canvasPaneMove: (id, dx, dy) => ipcRenderer.send(CH.CANVAS_PANE_MOVE, id, dx, dy),
+  canvasRaisePane: (id) => ipcRenderer.invoke(CH.CANVAS_PANE_RAISE, id),
+  canvasFit: () => ipcRenderer.invoke(CH.CANVAS_FIT),
+  canvasReset: () => ipcRenderer.invoke(CH.CANVAS_RESET),
+  canvasFocusPane: (id) => ipcRenderer.invoke(CH.CANVAS_FOCUS_PANE, id),
+  canvasPaneResize: (id, edge, dx, dy) => ipcRenderer.send(CH.CANVAS_PANE_RESIZE, id, edge, dx, dy),
+  canvasPaneFling: (id, vx, vy) => ipcRenderer.send(CH.CANVAS_PANE_FLING, id, vx, vy),
+  canvasCenter: (wx, wy) => ipcRenderer.send(CH.CANVAS_CENTER, wx, wy),
+  setCanvasPrefs: (prefs) => ipcRenderer.send(CH.CANVAS_PREFS, prefs),
+  onCanvasState: (cb) => ipcRenderer.on(CH.CANVAS_STATE, (_e, d) => cb(d)),
+  onCanvasSnapshot: (cb) => ipcRenderer.on(CH.CANVAS_SNAPSHOT, (_e, d) => cb(d)),
+
   toggleMaximize: () => ipcRenderer.invoke(CH.TOGGLE_MAXIMIZE),
   setChromeHeight: (h) => ipcRenderer.invoke(CH.SET_CHROME_HEIGHT, h),
   queryHistory: (input) => ipcRenderer.invoke(CH.HISTORY_QUERY, input),
