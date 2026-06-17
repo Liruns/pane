@@ -34,6 +34,7 @@ module.exports = {
     MIN_SCALE: 0.1,  // furthest zoom-out
     MAX_SCALE: 4,    // closest zoom-in
     DEFAULT_PANE: { width: 800, height: 600 }, // a fresh pane's world size
+    MIN_PANE: { width: 240, height: 180 },     // smallest a pane may be resized to (world units)
     PANE_GAP: 40,    // world-space gap when auto-arranging new panes
   },
 };

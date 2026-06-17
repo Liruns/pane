@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('pane', {
   canvasFit: () => ipcRenderer.invoke(CH.CANVAS_FIT),
   canvasReset: () => ipcRenderer.invoke(CH.CANVAS_RESET),
   canvasFocusPane: (id) => ipcRenderer.invoke(CH.CANVAS_FOCUS_PANE, id),
+  canvasPaneResize: (id, edge, dx, dy) => ipcRenderer.send(CH.CANVAS_PANE_RESIZE, id, edge, dx, dy),
+  canvasCenter: (wx, wy) => ipcRenderer.send(CH.CANVAS_CENTER, wx, wy),
   onCanvasState: (cb) => ipcRenderer.on(CH.CANVAS_STATE, (_e, d) => cb(d)),
 
   toggleMaximize: () => ipcRenderer.invoke(CH.TOGGLE_MAXIMIZE),

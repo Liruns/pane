@@ -147,14 +147,23 @@ Each phase is shippable and leaves v0 behavior intact until the flag flips.
    tiles every pane via `CanvasLayout`, and handles pan (drag) / zoom (wheel) / pane-move (drag a
    title bar) / raise. All panes stay **live** (no snapshots yet). **Needs on-machine GUI verification**
    — the input/z-order model (canvas DOM behind native page views) is unverifiable headless.
-5. **Zoom via focused-live / frozen-tiles** — add `capturePage` snapshots for non-focused panes so N
-   panes don't each burn a live renderer (§3). The performance gate: N panes must stay *fast*. v1
-   keeps all panes live; this is the next priority.
-6. **Gestures + spring** — pinch-zoom, momentum/inertia, pane resize handles, with `ease-spring`
-   (DESIGN §15). The canvas is the surface springs were reserved for.
-7. **Persistence + polish** — world rects + camera in the session, per-pane devtools, reduced motion
-   (§15.5), the empty-canvas start affordance, and lifting the v1 constraints (rail + docked devtools
-   are forced off in canvas mode today).
+5. **✅ Zoom via focused-live / frozen-tiles** — the active pane is the one live renderer (true
+   `setZoomFactor` zoom); every other pane is a downscaled `capturePage` snapshot tile. So N panes
+   cost one live renderer, not N.
+6. **◑ Gestures + commands** — landed: animated **fit / reset / focus** camera tweens (easeInOutCubic),
+   **pane resize handles** (8-way, active pane), a **minimap** overview navigator, **dot-grid** pan
+   surface, **wheel-pan + Ctrl/⌘-wheel zoom** (trackpad pinch rides the same ctrl+wheel path Chromium
+   synthesizes), and keyboard (`+/-/0/F/arrows/Esc`). Still open: **spring physics / momentum-inertia**
+   on drag + fling (DESIGN §15 `ease-spring` — the surface springs were reserved for).
+7. **◑ Persistence + polish** — landed: world rects + camera pose in the session (restored by index).
+   Still open: per-pane devtools in canvas mode, reduced-motion on the camera tween, an empty-canvas
+   start affordance, and lifting the v1 constraints (the rail + docked devtools are forced off in
+   canvas mode today; overlapping panes can hide a tile's title bar).
+
+### Commands / channels (canvas lane, all trusted-chrome, no-op outside canvas mode)
+`SET_CANVAS_MODE` · `CANVAS_PAN` · `CANVAS_ZOOM` · `CANVAS_PANE_MOVE` · `CANVAS_PANE_RESIZE` ·
+`CANVAS_PANE_RAISE` · `CANVAS_FOCUS_PANE` · `CANVAS_FIT` · `CANVAS_RESET` · `CANVAS_CENTER` (minimap);
+main → surface: `CANVAS_STATE` (camera, region, per-pane screen+world+snapshot).
 
 ## 7. Open questions / risks
 

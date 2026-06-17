@@ -60,6 +60,8 @@ function registerIpc(resolveWindow) {
   handle(CH.CANVAS_FIT, (e) => { const w = winOf(e); if (w) w.fitCanvas(); });
   handle(CH.CANVAS_RESET, (e) => { const w = winOf(e); if (w) w.resetCanvas(); });
   handle(CH.CANVAS_FOCUS_PANE, (e, id) => { const w = winOf(e); if (w) w.focusCanvasPane(id); });
+  on(CH.CANVAS_PANE_RESIZE, (e, id, edge, dx, dy) => { const w = winOf(e); if (w) w.onCanvasPaneResize(id, edge, dx, dy); });
+  on(CH.CANVAS_CENTER, (e, wx, wy) => { const w = winOf(e); if (w) w.centerCanvasOn(wx, wy); });
 
   handle(CH.TOGGLE_MAXIMIZE, (e) => {
     const w = winOf(e);

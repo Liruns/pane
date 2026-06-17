@@ -9,6 +9,7 @@ const Camera = require('./canvas/camera');
 const CanvasLayout = require('./canvas/canvas-layout');
 const Canvas = require('./canvas/canvas');
 const arrange = require('./canvas/arrange');
+const { resizeWorld } = require('./canvas/resize');
 const DevtoolsDock = require('./devtools-dock');
 const Sidebar = require('./sidebar');
 const { handlePageKey } = require('./shortcuts');
@@ -495,12 +496,14 @@ class PaneWindow {
         loading: !!t.loading,
         snapshot: active ? null : (t.view._snapshot || null), // live pane shows through; others are tiles
         screen: { x: abs.x - left, y: abs.y - top, width: abs.width, height: abs.height }, // region-local
+        world: { x: t.world.x, y: t.world.y, width: t.world.width, height: t.world.height }, // for the minimap
       };
     });
     this.canvas.send(CH.CANVAS_STATE, {
       on: true,
       scale: this._camera.scale,
-      camera: { x: this._camera.x, y: this._camera.y, scale: this._camera.scale }, // for the dot-grid pan
+      camera: { x: this._camera.x, y: this._camera.y, scale: this._camera.scale }, // dot-grid pan + minimap viewport
+      region: { width: region.width - left, height: region.regionH }, // region-local viewport size (minimap)
       panes,
     });
   }
@@ -551,6 +554,24 @@ class PaneWindow {
     // The drag delta is in screen px; divide by scale to move the pane the same distance in world space.
     t.world.x += dx / this._camera.scale;
     t.world.y += dy / this._camera.scale;
+    this._canvasRelayout();
+  }
+  onCanvasPaneResize(id, edge, dx, dy) {
+    if (this._mode !== 'canvas') return;
+    this._cancelTween();
+    const t = this.tabs.tabs.find((x) => x.id === id);
+    if (!t || !t.world) return;
+    const s = this._camera.scale; // screen delta → world delta
+    t.world = resizeWorld(t.world, edge, dx / s, dy / s, CANVAS.MIN_PANE);
+    this._canvasRelayout();
+  }
+  /** Center the camera on a world point (the minimap click/drag-to-navigate), keeping zoom. */
+  centerCanvasOn(wx, wy) {
+    if (this._mode !== 'canvas') return;
+    this._cancelTween();
+    const { left, width, regionH } = this._region();
+    const s = this._camera.scale;
+    this._camera.set({ x: (width - left) / 2 - wx * s, y: regionH / 2 - wy * s, scale: s });
     this._canvasRelayout();
   }
   raiseCanvasPane(id) {
