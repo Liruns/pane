@@ -1,6 +1,6 @@
 'use strict';
 const { BaseWindow, shell, screen } = require('electron');
-const { TABSTRIP_HEIGHT, CHROME_HEIGHT, WINDOW, COLORS } = require('../shared/config');
+const { TABSTRIP_HEIGHT, CHROME_HEIGHT, WINDOW, COLORS, CANVAS } = require('../shared/config');
 const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
 const TabManager = require('./tab-manager');
@@ -113,7 +113,7 @@ class PaneWindow {
     this.win.on('moved', () => this._saveSession());
     // Take any detached devtools windows + per-tab hosts down with the main window. The OS 'X' fires
     // 'closed' without routing through TabManager teardown, so the dock retires them explicitly.
-    this.win.on('closed', () => { this.dock.handleWindowClosed(this.tabs.tabs); this.sidebar.destroy(); this.canvas.destroy(); });
+    this.win.on('closed', () => { this._cancelTween(); this.dock.handleWindowClosed(this.tabs.tabs); this.sidebar.destroy(); this.canvas.destroy(); });
 
     // DESIGN §14: when the app loses focus the chrome goes inert (a subtle muted shift, matching
     // native Win11 inactive-window behavior). The renderer applies the visual; main just reports state.
@@ -146,6 +146,15 @@ class PaneWindow {
     } else {
       this.tabs.newTab(); // fresh start page
     }
+    // Restore the canvas layout (per-tab world rects + camera) by index, so reopening keeps the
+    // arrangement (CANVAS.md persistence). canvasMode itself comes from settings, applied on load.
+    const canvas = restore && restore.canvas;
+    if (canvas) {
+      if (Array.isArray(canvas.worlds)) {
+        this.tabs.tabs.forEach((t, i) => { if (canvas.worlds[i]) t.world = canvas.worlds[i]; });
+      }
+      if (canvas.camera) this._camera.set(canvas.camera);
+    }
   }
 
   serialize() {
@@ -156,6 +165,8 @@ class PaneWindow {
       // When maximized, persist the NORMAL bounds so un-maximize after restore returns a sane size.
       bounds: this.win.isMaximized() ? this.win.getNormalBounds() : this.win.getBounds(),
       maximized: this.win.isMaximized(),
+      // Canvas arrangement: per-tab world rects (index-aligned with `tabs`) + the camera pose.
+      canvas: { camera: this._camera.toJSON(), worlds: tabs.map((t) => t.world || null) },
     };
   }
 
@@ -344,10 +355,11 @@ class PaneWindow {
       if (this.sidebar.enabled) this.setVerticalTabs(false); // the canvas owns the whole region (v1)
       for (const t of this.tabs.tabs) t.view.closeDevtools();  // no docked devtools over the canvas
       this.dock.refresh();
-      this._ensureWorlds();
+      this._ensureWorlds({ grid: true }); // spread existing panes on a grid on entry
       this.canvas.setEnabled(true);
       this._layout = this._canvasLayout;
     } else {
+      this._cancelTween();
       this.canvas.setEnabled(false);
       this._layout = this._tabLayout;
       // Leaving canvas: undo the live pane's zoom and drop the (now-stale) tiles so tabs mode is clean.
@@ -363,10 +375,82 @@ class PaneWindow {
     this._pushCanvas();
   }
 
-  /** Give every pane a world rect if it lacks one (a fresh tab) — seeded on a grid (arrange.js). */
-  _ensureWorlds() {
-    this.tabs.tabs.forEach((t, i) => { if (!t.world) t.world = arrange.slotRect(i); });
+  /** Give worldless panes a world rect. On canvas ENTER ({grid:true}) every pane is seeded on a grid
+   *  (arrange.js) so they spread out; a pane created LATER drops near the current viewport center
+   *  (lightly cascaded) so it lands in view, not off at the grid origin. No-op outside canvas mode. */
+  _ensureWorlds(opts = {}) {
+    if (this._mode !== 'canvas') return;
+    const worldless = this.tabs.tabs.filter((t) => !t.world);
+    if (!worldless.length) return;
+    if (opts.grid) {
+      this.tabs.tabs.forEach((t, i) => { if (!t.world) t.world = arrange.slotRect(i); });
+      return;
+    }
+    const c = this._viewportCenterWorld();
+    const { width: W, height: H } = CANVAS.DEFAULT_PANE;
+    worldless.forEach((t, k) => {
+      t.world = { x: c.x - W / 2 + k * 30, y: c.y - H / 2 + k * 30, width: W, height: H };
+    });
   }
+
+  /** The world point at the center of the current viewport (region) — where new panes land. */
+  _viewportCenterWorld() {
+    const { width, regionH } = this._region();
+    return this._camera.screenToWorld(width / 2, regionH / 2);
+  }
+
+  /* ── Canvas camera commands (animated) ───────────────────────────────────────
+     fit / reset / focus tween the camera with an ease curve (DESIGN §15 — chrome-ish commands use
+     ease, not the gesture springs). Direct gestures (pan/zoom/move) cancel any in-flight tween. */
+  fitCanvas() {
+    if (this._mode !== 'canvas') return;
+    const rects = this.tabs.tabs.filter((t) => t.world).map((t) => t.world);
+    const { width, regionH } = this._region();
+    this._animateCamera(Camera.fitPose(rects, { width, height: regionH }));
+  }
+  resetCanvas() {
+    if (this._mode !== 'canvas') return;
+    const { width, regionH } = this._region();
+    const act = this.tabs.tabs.find((t) => t.id === this.tabs.activeId);
+    if (act && act.world) {
+      const cx = act.world.x + act.world.width / 2;
+      const cy = act.world.y + act.world.height / 2;
+      this._animateCamera({ x: width / 2 - cx, y: regionH / 2 - cy, scale: 1 });
+    } else {
+      this._animateCamera({ x: 0, y: 0, scale: 1 });
+    }
+  }
+  focusCanvasPane(id) {
+    if (this._mode !== 'canvas') return;
+    const t = this.tabs.tabs.find((x) => x.id === id);
+    if (!t || !t.world) return;
+    this.tabs.activate(id); // raise + go live
+    const { width, regionH } = this._region();
+    this._animateCamera(Camera.fitPose([t.world], { width, height: regionH }));
+  }
+
+  /** Tween the camera from its current pose to `target` over `ms` (easeInOutCubic), re-tiling +
+   *  re-pushing each frame. Outside canvas mode (or mid-teardown) it jumps. One tween at a time. */
+  _animateCamera(target, ms = 320) {
+    this._cancelTween();
+    if (this.win.isDestroyed() || this._mode !== 'canvas') { this._camera.set(target); this._canvasRelayout(); return; }
+    const from = { x: this._camera.x, y: this._camera.y, scale: this._camera.scale };
+    const start = Date.now();
+    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    this._tween = setInterval(() => {
+      if (this.win.isDestroyed()) { this._cancelTween(); return; }
+      const p = Math.min(1, (Date.now() - start) / ms);
+      const k = ease(p);
+      this._camera.set({
+        x: from.x + (target.x - from.x) * k,
+        y: from.y + (target.y - from.y) * k,
+        scale: from.scale + (target.scale - from.scale) * k,
+      });
+      this._canvasRelayout();
+      if (p >= 1) this._cancelTween();
+    }, 16);
+  }
+  _cancelTween() { if (this._tween) { clearInterval(this._tween); this._tween = null; } }
 
   /** The current content region (right of the rail, below the chrome) in window coords. */
   _region() {
@@ -413,7 +497,12 @@ class PaneWindow {
         screen: { x: abs.x - left, y: abs.y - top, width: abs.width, height: abs.height }, // region-local
       };
     });
-    this.canvas.send(CH.CANVAS_STATE, { on: true, scale: this._camera.scale, panes });
+    this.canvas.send(CH.CANVAS_STATE, {
+      on: true,
+      scale: this._camera.scale,
+      camera: { x: this._camera.x, y: this._camera.y, scale: this._camera.scale }, // for the dot-grid pan
+      panes,
+    });
   }
 
   /** Freeze a pane to a snapshot (a downscaled data URL) so it keeps showing as a tile once it's no
@@ -440,19 +529,23 @@ class PaneWindow {
     this._pushCanvas();
   }
 
-  /* Gesture handlers (canvas → main, forwarded by ipc.js). All no-op outside canvas mode. */
+  /* Gesture handlers (canvas → main, forwarded by ipc.js). All no-op outside canvas mode; a direct
+     gesture cancels any in-flight camera tween so the user's input wins immediately. */
   onCanvasPan(dx, dy) {
     if (this._mode !== 'canvas') return;
+    this._cancelTween();
     this._camera.panBy(dx, dy);
     this._canvasRelayout();
   }
   onCanvasZoom(factor, ax, ay) {
     if (this._mode !== 'canvas') return;
+    this._cancelTween();
     this._camera.zoomBy(factor, ax, ay);
     this._canvasRelayout();
   }
   onCanvasPaneMove(id, dx, dy) {
     if (this._mode !== 'canvas') return;
+    this._cancelTween();
     const t = this.tabs.tabs.find((x) => x.id === id);
     if (!t || !t.world) return;
     // The drag delta is in screen px; divide by scale to move the pane the same distance in world space.

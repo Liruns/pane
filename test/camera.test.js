@@ -2,6 +2,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const Camera = require('../src/main/canvas/camera');
+const { fitPose } = require('../src/main/canvas/camera');
 const { CANVAS } = require('../src/shared/config');
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -79,4 +80,42 @@ test('toJSON round-trips through the constructor', () => {
   const c = new Camera({ x: 12, y: 34, scale: 1.5 });
   const c2 = new Camera(c.toJSON());
   assert.deepEqual(c2.toJSON(), { x: 12, y: 34, scale: 1.5 });
+});
+
+test('set() jumps to a pose and clamps the scale', () => {
+  const c = new Camera();
+  c.set({ x: 5, y: 6, scale: 999 });
+  assert.equal(c.x, 5);
+  assert.equal(c.y, 6);
+  assert.equal(c.scale, CANVAS.MAX_SCALE);
+});
+
+test('fitPose with no rects is identity', () => {
+  assert.deepEqual(fitPose([], { width: 800, height: 600 }), { x: 0, y: 0, scale: 1 });
+});
+
+test('fitPose centers a single rect and fits it under the scale cap', () => {
+  // One 100×100 rect in an 800×600 viewport: easily fits, so scale clamps to MAX (4).
+  const pose = fitPose([{ x: 0, y: 0, width: 100, height: 100 }], { width: 800, height: 600 },
+    { padding: 0, titleH: 0 });
+  assert.equal(pose.scale, CANVAS.MAX_SCALE);
+  // Center (50,50) → viewport center (400,300): x = 400 - 50*4 = 200; y = 300 - 50*4 = 100.
+  near(pose.x, 200);
+  near(pose.y, 100);
+});
+
+test('fitPose scales down to fit a large spread within padding', () => {
+  // Two rects spanning 0..2000 wide; viewport 1000 wide, padding 100 → avail 800 → scale 0.4.
+  const rects = [{ x: 0, y: 0, width: 100, height: 100 }, { x: 1900, y: 0, width: 100, height: 100 }];
+  const pose = fitPose(rects, { width: 1000, height: 1000 }, { padding: 100, titleH: 0 });
+  near(pose.scale, 0.4);
+  // bbox is 2000 wide, center x = 1000; mapped to viewport center 500 → x = 500 - 1000*0.4 = 100.
+  near(pose.x, 100);
+});
+
+test('fitPose never exceeds the scale band', () => {
+  const huge = fitPose([{ x: 0, y: 0, width: 1, height: 1 }], { width: 8000, height: 8000 });
+  assert.ok(huge.scale <= CANVAS.MAX_SCALE);
+  const tiny = fitPose([{ x: 0, y: 0, width: 100000, height: 100000 }], { width: 100, height: 100 });
+  assert.ok(tiny.scale >= CANVAS.MIN_SCALE);
 });

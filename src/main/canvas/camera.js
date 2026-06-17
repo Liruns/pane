@@ -60,8 +60,47 @@ class Camera {
     return this.zoomTo(this.scale * factor, ax, ay);
   }
 
+  /** Jump straight to a target pose (used at the end of / without a tween). Scale is clamped. */
+  set(pose) {
+    if (!pose) return this;
+    if (typeof pose.x === 'number') this.x = pose.x;
+    if (typeof pose.y === 'number') this.y = pose.y;
+    if (typeof pose.scale === 'number') this.scale = clamp(pose.scale, CANVAS.MIN_SCALE, CANVAS.MAX_SCALE);
+    return this;
+  }
+
   /** Serialize for the session (CANVAS.md persistence). */
   toJSON() { return { x: this.x, y: this.y, scale: this.scale }; }
 }
 
+/**
+ * The camera pose ({x,y,scale}) that fits every world rect into `viewport` ({width,height} in
+ * region-local px), centered, with `padding` margin and `titleH` headroom at the top for the panes'
+ * title bars. Pure — unit-tested, no Electron — so the fit/reset/focus commands share one contract.
+ * Empty input → identity. Scale is clamped to the usable band.
+ */
+function fitPose(rects, viewport, opts = {}) {
+  if (!rects || !rects.length) return { x: 0, y: 0, scale: 1 };
+  const padding = opts.padding ?? 60;
+  const titleH = opts.titleH ?? 28;
+  const minX = Math.min(...rects.map((r) => r.x));
+  const minY = Math.min(...rects.map((r) => r.y));
+  const maxX = Math.max(...rects.map((r) => r.x + r.width));
+  const maxY = Math.max(...rects.map((r) => r.y + r.height));
+  const bw = Math.max(1, maxX - minX);
+  const bh = Math.max(1, maxY - minY);
+  const availW = Math.max(1, viewport.width - 2 * padding);
+  const availH = Math.max(1, viewport.height - 2 * padding - titleH);
+  const scale = clamp(Math.min(availW / bw, availH / bh), CANVAS.MIN_SCALE, CANVAS.MAX_SCALE);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+  return {
+    x: viewport.width / 2 - cx * scale,
+    // Center vertically, nudged down by half the title headroom so title bars aren't clipped at the top.
+    y: viewport.height / 2 - cy * scale + titleH / 2,
+    scale,
+  };
+}
+
 module.exports = Camera;
+module.exports.fitPose = fitPose;

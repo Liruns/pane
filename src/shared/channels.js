@@ -28,6 +28,9 @@ module.exports = {
   CANVAS_ZOOM: 'pane:canvas-zoom',             // canvas → main: zoom {factor, ax, ay} about a screen anchor
   CANVAS_PANE_MOVE: 'pane:canvas-pane-move',   // canvas → main: move a pane by a screen delta {id,dx,dy}
   CANVAS_PANE_RAISE: 'pane:canvas-pane-raise', // canvas → main: focus/raise a pane {id}
+  CANVAS_FIT: 'pane:canvas-fit',               // canvas → main: animate to fit all panes
+  CANVAS_RESET: 'pane:canvas-reset',           // canvas → main: animate to 100% on the active pane
+  CANVAS_FOCUS_PANE: 'pane:canvas-focus-pane', // canvas → main: raise + animate-zoom to a pane {id}
   TOGGLE_MAXIMIZE: 'pane:toggle-maximize',
   SET_CHROME_HEIGHT: 'pane:set-chrome-height',
   HISTORY_QUERY: 'pane:history-query',
