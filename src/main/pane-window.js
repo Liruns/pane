@@ -93,8 +93,10 @@ class PaneWindow {
     this._layout = this._tabLayout;
 
     // The canvas surface view (off until canvas mode). Owns only the WebContentsView lifecycle; the
-    // Camera / world rects / gesture math live here in the window. onReady → push the first frame.
-    this.canvas = new Canvas({ win: this.win, onReady: () => this._pushCanvas() });
+    // Camera / world rects / gesture math live here in the window. onReady → push the first frame +
+    // resend the (off-band) tile snapshots so the surface paints them.
+    this._reduceMotion = false; // mirrored from the surface (CANVAS_PREFS); camera tween honors it
+    this.canvas = new Canvas({ win: this.win, onReady: () => { this._pushCanvas(); this._pushSnapshots(); } });
 
     this.win.contentView.addChildView(this.chrome.view);
     this._connect();
@@ -203,6 +205,9 @@ class PaneWindow {
     // active tab (deferring to the devtools dock for page │ splitter │ host); CanvasLayout tiles
     // every pane from the camera (CANVAS.md).
     this._layout.place({ left, top, width, regionH });
+    // layout() is the single place canvas frames are re-pushed — so a window resize (which calls
+    // layout but not a gesture handler) re-syncs the surface, not just pans/zooms.
+    if (this._mode === 'canvas') this._pushCanvas();
   }
 
   /** Grow/shrink the chrome view to host an overlay (suggestions / menu). The view is
@@ -235,7 +240,7 @@ class PaneWindow {
       // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
-      this._pushCanvas(); // the active pane changed → refresh the canvas frames + which pane is live
+      // (layout() re-pushes the canvas frames, incl. which pane is now live)
     }
   }
 
@@ -371,9 +376,8 @@ class PaneWindow {
     }
     this._syncMountedViews(); // mount the active view (canvas restacks the surface under it)
     this._lastBounds = null;  // mode changed the whole region — force a full re-tile
-    this.layout();
+    this.layout();            // (canvas branch re-pushes the frames; tabs branch pushes nothing)
     this._sendLayoutState();
-    this._pushCanvas();
   }
 
   /** Give worldless panes a world rect. On canvas ENTER ({grid:true}) every pane is seeded on a grid
@@ -434,7 +438,10 @@ class PaneWindow {
    *  re-pushing each frame. Outside canvas mode (or mid-teardown) it jumps. One tween at a time. */
   _animateCamera(target, ms = 320) {
     this._cancelTween();
-    if (this.win.isDestroyed() || this._mode !== 'canvas') { this._camera.set(target); this._canvasRelayout(); return; }
+    // Jump (no tween) when reduced motion is requested (DESIGN §15.5), mid-teardown, or not in canvas.
+    if (this._reduceMotion || this.win.isDestroyed() || this._mode !== 'canvas') {
+      this._camera.set(target); this._canvasRelayout(); return;
+    }
     const from = { x: this._camera.x, y: this._camera.y, scale: this._camera.scale };
     const start = Date.now();
     const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -494,7 +501,8 @@ class PaneWindow {
         favicon: t.favicon || '',
         active,
         loading: !!t.loading,
-        snapshot: active ? null : (t.view._snapshot || null), // live pane shows through; others are tiles
+        // NB: the snapshot bitmap is NOT in this per-frame payload — it ships on CANVAS_SNAPSHOT only
+        // when it changes, so a 60fps pan/zoom doesn't re-serialize tens of KB of base64 per pane.
         screen: { x: abs.x - left, y: abs.y - top, width: abs.width, height: abs.height }, // region-local
         world: { x: t.world.x, y: t.world.y, width: t.world.width, height: t.world.height }, // for the minimap
       };
@@ -521,15 +529,27 @@ class PaneWindow {
       const { width } = img.getSize();
       const scaled = width > max ? img.resize({ width: max }) : img;
       pageView._snapshot = scaled.toDataURL();
-      this._pushCanvas();
+      const tab = this.tabs.tabs.find((t) => t.view === pageView);
+      if (tab) this.canvas.send(CH.CANVAS_SNAPSHOT, { id: tab.id, snapshot: pageView._snapshot }); // off the per-frame path
     }).catch(() => { /* capture can fail on an unmounted/navigating view — keep the last tile */ });
   }
 
-  /** Re-tile the page views after a camera/world change and refresh the frames. */
+  /** Resend every known tile bitmap on its own channel — used when the surface (re)loads, since the
+   *  snapshots aren't part of the per-frame CANVAS_STATE. */
+  _pushSnapshots() {
+    if (this._mode !== 'canvas') return;
+    for (const t of this.tabs.tabs) {
+      if (t.view._snapshot) this.canvas.send(CH.CANVAS_SNAPSHOT, { id: t.id, snapshot: t.view._snapshot });
+    }
+  }
+
+  /** Surface prefs from the renderer (reduced motion) — the camera tween jumps instead of animating. */
+  setCanvasPrefs(prefs) { this._reduceMotion = !!(prefs && prefs.reduceMotion); }
+
+  /** Re-tile the page views after a camera/world change. layout() re-pushes the frames. */
   _canvasRelayout() {
     this._lastBounds = null; // camera moves don't change window size — bypass the size cache
     this.layout();
-    this._pushCanvas();
   }
 
   /* Gesture handlers (canvas → main, forwarded by ipc.js). All no-op outside canvas mode; a direct

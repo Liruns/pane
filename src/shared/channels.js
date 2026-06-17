@@ -33,6 +33,7 @@ module.exports = {
   CANVAS_FOCUS_PANE: 'pane:canvas-focus-pane', // canvas → main: raise + animate-zoom to a pane {id}
   CANVAS_PANE_RESIZE: 'pane:canvas-pane-resize', // canvas → main: resize a pane {id, edge, dx, dy}
   CANVAS_CENTER: 'pane:canvas-center',         // canvas → main: center the camera on a world point {wx, wy} (minimap)
+  CANVAS_PREFS: 'pane:canvas-prefs',           // canvas → main: surface prefs {reduceMotion} (camera tween honors it)
   TOGGLE_MAXIMIZE: 'pane:toggle-maximize',
   SET_CHROME_HEIGHT: 'pane:set-chrome-height',
   HISTORY_QUERY: 'pane:history-query',
@@ -54,6 +55,7 @@ module.exports = {
   OPEN_PALETTE: 'pane:open-palette',
   TABS_STATE: 'pane:tabs-state',
   LAYOUT_STATE: 'pane:layout-state', // { verticalTabs, canvasMode } — chrome reflects mode (menu checks, body class)
-  CANVAS_STATE: 'pane:canvas-state', // main → canvas: { on, scale, panes:[{id,title,favicon,active,loading,screen}] }
+  CANVAS_STATE: 'pane:canvas-state', // main → canvas: { on, scale, camera, region, panes:[{id,title,favicon,active,loading,screen,world}] }
+  CANVAS_SNAPSHOT: 'pane:canvas-snapshot', // main → canvas: { id, snapshot } — a frozen tile bitmap, sent only when it changes (off the per-frame state path)
   TOAST: 'pane:toast',
 };
