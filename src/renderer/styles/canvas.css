@@ -1,0 +1,114 @@
+/* The infinite-canvas surface (DESIGN §11 roadmap — "many Pane instances float and arrange on one
+   surface"). Its own WebContentsView filling the content region, rendered BEHIND the live page
+   views. This surface draws ONLY pane chrome: a title bar above each pane and a 1px hairline ring
+   around its page rect; the rect interior is a "hole" — the native page view floats there on top,
+   so we paint nothing opaque over it. The window already paints the --canvas substrate behind us,
+   so this document's bg is transparent (base.css). */
+@import "fonts.css";
+@import "tokens.css";
+@import "base.css";
+
+#canvas {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  cursor: grab; /* the empty canvas is the pan surface */
+}
+#canvas.panning { cursor: grabbing; }
+
+/* ── A pane's chrome: an absolutely-positioned group laid out in region-local screen px ──
+   .pane is a zero-size anchor at the page rect's top-left; the title bar sits ABOVE it and the
+   ring overlays the page rect. Both are pointer targets; the rect interior stays click-through
+   (the native page view owns it). */
+.pane {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* The 1px border ring around the page rect — border-as-light (DESIGN §2/§6), no drop shadow.
+   `box-sizing: border-box` keeps the border outside the page content visually; the interior is
+   transparent so the live page shows through. pointer-events:none so drags/wheels over the page
+   rect aren't swallowed by chrome (the native view is on top anyway). */
+.pane-ring {
+  position: absolute;
+  border: 1px solid var(--hairline-strong);
+  border-radius: 0 0 8px 8px; /* meet the title bar's rounded top; square where they join */
+  pointer-events: none;
+  transition: border-color var(--motion-fast) var(--ease-standard);
+}
+.pane.active .pane-ring { border-color: var(--accent-dark); }
+
+/* Title bar — a small chrome strip ABOVE the page rect (DESIGN §4 component grammar).
+   surface-1 translucent fill, rounded top corners (radius md = 8px), muted control-label text. */
+.pane-title {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 6px 0 10px;
+  border-radius: 8px 8px 0 0;
+  background: rgba(39, 39, 41, 0.82); /* surface-1 (#272729), translucent */
+  border: 1px solid var(--hairline-strong);
+  border-bottom: 0;
+  color: var(--fg-muted);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  letter-spacing: -0.004em; /* DESIGN §3 control-label tracking */
+  overflow: hidden;
+  cursor: grab; /* drag the title bar to move the pane */
+  transition: background var(--motion-fast) var(--ease-standard),
+              border-color var(--motion-fast) var(--ease-standard),
+              color var(--motion-fast) var(--ease-standard);
+}
+.pane-title.dragging { cursor: grabbing; }
+.pane.active .pane-title {
+  border-color: var(--accent-dark);
+  color: var(--fg);
+}
+
+/* Loading: a quiet ease pulse on the title bar (chrome motion, never spring — DESIGN §15). */
+@keyframes pane-title-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.62; } }
+.pane.loading .pane-title { animation: pane-title-pulse 1.4s var(--ease-standard) infinite; }
+
+.pane-title .favicon {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+  color: var(--fg-faint);
+}
+.pane-title .favicon img { width: 16px; height: 16px; }
+.pane-title .favicon svg { width: 14px; height: 14px; }
+
+.pane-title .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pane-title .close {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-faint);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: default;
+  transition: background var(--motion-fast) var(--ease-standard),
+              color var(--motion-fast) var(--ease-standard);
+}
+.pane-title .close:hover { background: rgba(255, 255, 255, 0.12); color: var(--fg); }
+.pane-title .close svg { width: 12px; height: 12px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pane.loading .pane-title { animation: none; }
+}

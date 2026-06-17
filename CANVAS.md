@@ -137,20 +137,24 @@ just makes the next steps possible without touching the trust model again.
 
 Each phase is shippable and leaves v0 behavior intact until the flag flips.
 
-1. **(done) Per-sender IPC routing** — §5. Foundation; no UI.
-2. **Layout-strategy seam** — extract `PaneWindow.layout()`'s page-region math into a `TabLayout`
-   object and route `layout()` through a `mode`. Still tabs-only. Pure refactor, fully testable.
-3. **Camera + CanvasLayout (math only)** — land `Camera` and `CanvasLayout` with unit tests; not yet
-   wired to a view. Validates the world↔screen contract in isolation.
-4. **Static canvas (no zoom)** — behind `canvasMode`, render the `CanvasView`, tile live panes by pan
-   only (scale locked at 1). Proves multi-live-view tiling + the seam-hider substrate + resize
-   integrity at N views.
-5. **Zoom via focused-live / frozen-tiles** — add `setZoomFactor` for the focused pane and
-   `capturePage` snapshots for the rest (§3). The performance gate: N panes must stay *fast*.
-6. **Gestures + spring** — drag/resize/pan/pinch with `ease-spring` (DESIGN §15). The canvas is the
-   surface springs were reserved for.
-7. **Persistence + polish** — world rects in the session, per-pane devtools in canvas mode, reduced
-   motion (§15.5), the new-tab/start affordance for an empty canvas.
+1. **✅ Per-sender IPC routing** — §5. Foundation; no UI.
+2. **✅ Layout-strategy seam** — `PaneWindow.layout()`'s page-region math extracted into a `TabLayout`
+   object; `layout()` routes through the active strategy. Pure refactor.
+3. **✅ Camera + CanvasLayout (math only)** — `Camera` and `CanvasLayout` landed with unit tests
+   (`npm test`). Validates the world↔screen contract in isolation.
+4. **✅ Static + zoom canvas (v1)** — behind the `canvasMode` setting (default off), the `Canvas`
+   controller mounts a `CanvasView` surface; `PaneWindow` owns the `Camera` + per-tab world rects,
+   tiles every pane via `CanvasLayout`, and handles pan (drag) / zoom (wheel) / pane-move (drag a
+   title bar) / raise. All panes stay **live** (no snapshots yet). **Needs on-machine GUI verification**
+   — the input/z-order model (canvas DOM behind native page views) is unverifiable headless.
+5. **Zoom via focused-live / frozen-tiles** — add `capturePage` snapshots for non-focused panes so N
+   panes don't each burn a live renderer (§3). The performance gate: N panes must stay *fast*. v1
+   keeps all panes live; this is the next priority.
+6. **Gestures + spring** — pinch-zoom, momentum/inertia, pane resize handles, with `ease-spring`
+   (DESIGN §15). The canvas is the surface springs were reserved for.
+7. **Persistence + polish** — world rects + camera in the session, per-pane devtools, reduced motion
+   (§15.5), the empty-canvas start affordance, and lifting the v1 constraints (rail + docked devtools
+   are forced off in canvas mode today).
 
 ## 7. Open questions / risks
 

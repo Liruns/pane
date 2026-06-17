@@ -50,6 +50,14 @@ function registerIpc(resolveWindow) {
   handle(CH.TAB_REOPEN, (e) => { const t = tabsOf(e); if (t) t.reopenClosed(); });
   handle(CH.SET_VERTICAL_TABS, (e, on) => { const w = winOf(e); if (w) w.setVerticalTabs(!!on); });
 
+  // Infinite canvas (DESIGN §11 / CANVAS.md). Pan/zoom/move are high-frequency → send (no ack);
+  // mode + raise → invoke. All resolve to the sender's window and no-op outside canvas mode.
+  handle(CH.SET_CANVAS_MODE, (e, on) => { const w = winOf(e); if (w) w.setCanvasMode(!!on); });
+  on(CH.CANVAS_PAN, (e, dx, dy) => { const w = winOf(e); if (w) w.onCanvasPan(dx, dy); });
+  on(CH.CANVAS_ZOOM, (e, factor, ax, ay) => { const w = winOf(e); if (w) w.onCanvasZoom(factor, ax, ay); });
+  on(CH.CANVAS_PANE_MOVE, (e, id, dx, dy) => { const w = winOf(e); if (w) w.onCanvasPaneMove(id, dx, dy); });
+  handle(CH.CANVAS_PANE_RAISE, (e, id) => { const w = winOf(e); if (w) w.raiseCanvasPane(id); });
+
   handle(CH.TOGGLE_MAXIMIZE, (e) => {
     const w = winOf(e);
     if (w) { w.win.isMaximized() ? w.win.unmaximize() : w.win.maximize(); }

@@ -5,6 +5,10 @@ const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
 const TabManager = require('./tab-manager');
 const TabLayout = require('./tab-layout');
+const Camera = require('./canvas/camera');
+const CanvasLayout = require('./canvas/canvas-layout');
+const Canvas = require('./canvas/canvas');
+const arrange = require('./canvas/arrange');
 const DevtoolsDock = require('./devtools-dock');
 const Sidebar = require('./sidebar');
 const { handlePageKey } = require('./shortcuts');
@@ -54,7 +58,8 @@ class PaneWindow {
     this.tabs = new TabManager();
     this._activeView = null;       // the active/focused pane (drives the toolbar, dock, focus)
     this._mounted = new Set();      // PageViews currently added as child views (visible). Tabs mode
-                                    // mounts just the active view; canvas mode will mount many (CANVAS.md).
+                                    // mounts just the active view; canvas mode mounts every pane (CANVAS.md).
+    this._mode = 'tabs';            // 'tabs' | 'canvas' — which layout strategy is live (CANVAS.md)
     this._lastBounds = null;
     this._chromeHeight = CHROME_HEIGHT; // grows while an overlay is open; layout() honors it
 
@@ -76,10 +81,19 @@ class PaneWindow {
     this.sidebar = new Sidebar({ win: this.win, refreshTabs: () => this.tabs.refresh() });
     this._verticalTabs = !!settings.get('verticalTabs');
 
-    // The content-region layout strategy (CANVAS.md): tabs mode today, CanvasLayout later. layout()
-    // does the window-level math and hands the post-rail region to _layout.place(). Swapping this
-    // object swaps the layout mode — the window stays closed to the difference.
-    this._layout = new TabLayout({ dock: this.dock, getActiveView: () => this._activeView });
+    // The content-region layout strategies (CANVAS.md). layout() does the window-level math and hands
+    // the post-rail region to _layout.place(); _layout points at one strategy, so swapping it swaps
+    // the mode and the window stays closed to the difference.
+    //  • TabLayout   — fills the region with the active tab (deferring to the devtools dock).
+    //  • CanvasLayout — tiles every pane from the shared Camera (zoom/pan).
+    this._camera = new Camera();
+    this._tabLayout = new TabLayout({ dock: this.dock, getActiveView: () => this._activeView });
+    this._canvasLayout = new CanvasLayout({ camera: this._camera, getPanes: () => this._canvasPanes() });
+    this._layout = this._tabLayout;
+
+    // The canvas surface view (off until canvas mode). Owns only the WebContentsView lifecycle; the
+    // Camera / world rects / gesture math live here in the window. onReady → push the first frame.
+    this.canvas = new Canvas({ win: this.win, onReady: () => this._pushCanvas() });
 
     this.win.contentView.addChildView(this.chrome.view);
     this._connect();
@@ -99,7 +113,7 @@ class PaneWindow {
     this.win.on('moved', () => this._saveSession());
     // Take any detached devtools windows + per-tab hosts down with the main window. The OS 'X' fires
     // 'closed' without routing through TabManager teardown, so the dock retires them explicitly.
-    this.win.on('closed', () => { this.dock.handleWindowClosed(this.tabs.tabs); this.sidebar.destroy(); });
+    this.win.on('closed', () => { this.dock.handleWindowClosed(this.tabs.tabs); this.sidebar.destroy(); this.canvas.destroy(); });
 
     // DESIGN §14: when the app loses focus the chrome goes inert (a subtle muted shift, matching
     // native Win11 inactive-window behavior). The renderer applies the visual; main just reports state.
@@ -110,10 +124,16 @@ class PaneWindow {
       // Restore the rail (if persisted on) and tell the chrome which mode it's in, so the top strip
       // hides and the menu toggle reflects reality from the first paint.
       if (this._verticalTabs) this.setVerticalTabs(true);
-      else this.chrome.send(CH.LAYOUT_STATE, { verticalTabs: false });
+      if (settings.get('canvasMode')) this.setCanvasMode(true); // restore canvas mode (CANVAS.md)
+      this._sendLayoutState();
       this.tabs.refresh();
       this._sendActive(this.win.isFocused()); // sync initial inert state once the toolbar is listening
     });
+  }
+
+  /** Tell the chrome which layout modes are live (menu checks, body classes). */
+  _sendLayoutState() {
+    this.chrome.send(CH.LAYOUT_STATE, { verticalTabs: this.sidebar.enabled, canvasMode: this._mode === 'canvas' });
   }
 
   _restoreTabs(restore) {
@@ -164,9 +184,12 @@ class PaneWindow {
     const regionH = Math.max(0, height - top);
     // The vertical-tabs rail (when on) takes the region's left edge; the page region starts after it.
     const left = this.sidebar.layout({ top, regionH, width });
+    // In canvas mode the canvas surface fills the whole region (under the page views); the page
+    // views are then tiled over it by CanvasLayout.
+    if (this._mode === 'canvas') this.canvas.layout({ left, top, width, regionH });
     // Hand the post-rail content region to the active layout strategy. Tabs mode fills it with the
-    // active tab (deferring to the devtools dock for page │ splitter │ host); CanvasLayout will tile
-    // many panes here later (CANVAS.md).
+    // active tab (deferring to the devtools dock for page │ splitter │ host); CanvasLayout tiles
+    // every pane from the camera (CANVAS.md).
     this._layout.place({ left, top, width, regionH });
   }
 
@@ -182,7 +205,7 @@ class PaneWindow {
   _setActiveView(view) {
     if (this._activeView === view) return;
     this._activeView = view;
-    this._syncMountedViews(); // mount the set this mode shows (tabs: the active view only)
+    this._syncMountedViews(); // mount the set this mode shows (tabs: active only; canvas: every pane)
     if (view) {
       // The active view changed, so the new view must be (re)tiled even when the window size is
       // unchanged. dock.reconcile() only relayouts when the dock state itself changes (it early-outs
@@ -190,18 +213,24 @@ class PaneWindow {
       // lay out explicitly. Order matters: nulling before reconcile lets a dock-driven relayout
       // reset _lastBounds so the trailing layout() no-ops instead of tiling twice.
       this._lastBounds = null;
-      this.dock.reconcile(); // swap in this tab's dock (or none)
-      this.layout();         // tile page │ (splitter │ devtools) for the newly active view
+      if (this._mode !== 'canvas') this.dock.reconcile(); // canvas mode runs no docked devtools
+      this.layout();         // tile page │ (splitter │ devtools), or the whole canvas
       // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
+      this._pushCanvas(); // the active pane changed → refresh the canvas frames (active ring)
     }
   }
 
   /** Recompute which page views are mounted (visible) for the current layout mode and reconcile the
-   *  child-view set. Tabs mode shows exactly the active view; canvas mode will show many (CANVAS.md). */
+   *  child-view set. Tabs mode shows exactly the active view; canvas mode shows every pane. */
   _syncMountedViews() {
-    this._mountViews(this._activeView ? [this._activeView] : []);
+    if (this._mode === 'canvas') {
+      this._mountViews(this.tabs.tabs.map((t) => t.view));
+      this._restackCanvas();
+    } else {
+      this._mountViews(this._activeView ? [this._activeView] : []);
+    }
   }
 
   /** Mount exactly `list` (PageViews) as child views below the chrome, diffing against what's already
@@ -214,6 +243,17 @@ class PaneWindow {
     for (const v of next) {
       if (!this._mounted.has(v)) { this.win.contentView.addChildView(v.view, 0); this._mounted.add(v); } // below the chrome in z-order
     }
+  }
+
+  /** Enforce canvas z-order (bottom → top): canvas surface · inactive panes · active pane · chrome.
+   *  addChildView moves an existing child, so re-adding in order restacks without re-creating views. */
+  _restackCanvas() {
+    const cv = this.win.contentView;
+    if (this.canvas.view) cv.addChildView(this.canvas.view, 0); // the surface sits beneath the panes
+    for (const t of this.tabs.tabs) if (t.id !== this.tabs.activeId) cv.addChildView(t.view.view);
+    const act = this.tabs.tabs.find((t) => t.id === this.tabs.activeId);
+    if (act) cv.addChildView(act.view.view); // the focused pane rises to the top of the stack
+    cv.addChildView(this.chrome.view);        // chrome always on top (overlays, WCO)
   }
 
   _connect() {
@@ -244,6 +284,8 @@ class PaneWindow {
     tabs.on('tabs', (state) => {
       chrome.send(CH.TABS_STATE, state);
       this.sidebar.send(CH.TABS_STATE, state); // the rail mirrors the top strip (no-op until enabled)
+      this._ensureWorlds();                    // a new pane needs a world rect before it can be tiled
+      this._pushCanvas();                      // refresh canvas frames (title / favicon / loading)
       this._saveSession();
       if (win.isDestroyed()) return;
       const a = state.tabs.find((t) => t.id === state.activeId);
@@ -279,7 +321,109 @@ class PaneWindow {
     }
     this._lastBounds = null; // region width changed — force a full re-tile
     this.layout();
-    this.chrome.send(CH.LAYOUT_STATE, { verticalTabs: on });
+    this._sendLayoutState();
+  }
+
+  /* ── Infinite canvas (DESIGN §11 / CANVAS.md) ────────────────────────────────
+     Canvas mode tiles every pane on one zoom-/pan-able surface instead of swapping one active tab.
+     The window owns the Camera, the per-tab world rects, and the gesture math; the Canvas controller
+     owns only the surface view, and CanvasLayout does the tiling. v1 is static+zoom: drag the canvas
+     to pan, wheel to zoom, drag a pane's title bar to move it. Devtools docking and the rail are off
+     in canvas mode (they'd fight the surface for the region). */
+  setCanvasMode(on) {
+    if (this.win.isDestroyed()) return;
+    on = !!on;
+    const mode = on ? 'canvas' : 'tabs';
+    if (mode === this._mode) return;
+    this._mode = mode;
+    settings.set('canvasMode', on);
+    if (on) {
+      if (this.sidebar.enabled) this.setVerticalTabs(false); // the canvas owns the whole region (v1)
+      for (const t of this.tabs.tabs) t.view.closeDevtools();  // no docked devtools over the canvas
+      this.dock.refresh();
+      this._ensureWorlds();
+      this.canvas.setEnabled(true);
+      this._layout = this._canvasLayout;
+    } else {
+      this.canvas.setEnabled(false);
+      this._layout = this._tabLayout;
+    }
+    this._syncMountedViews(); // canvas: mount every pane (+ restack); tabs: the active view only
+    this._lastBounds = null;  // mode changed the whole region — force a full re-tile
+    this.layout();
+    this._sendLayoutState();
+    this._pushCanvas();
+  }
+
+  /** Give every pane a world rect if it lacks one (a fresh tab) — seeded on a grid (arrange.js). */
+  _ensureWorlds() {
+    this.tabs.tabs.forEach((t, i) => { if (!t.world) t.world = arrange.slotRect(i); });
+  }
+
+  /** The current content region (right of the rail, below the chrome) in window coords. */
+  _region() {
+    const { width, height } = this.win.getContentBounds();
+    const top = CHROME_HEIGHT - 1;
+    return { left: this.sidebar.width(), top, width, regionH: Math.max(0, height - top) };
+  }
+
+  /** Panes adapted for CanvasLayout: a world rect + a setBounds that tiles the native page view. */
+  _canvasPanes() {
+    return this.tabs.tabs
+      .filter((t) => t.world && !t.view.webContents.isDestroyed())
+      .map((t) => ({ world: t.world, setBounds: (r) => t.view.view.setBounds(r) }));
+  }
+
+  /** Push the canvas frame state (camera + each pane's region-local clamped screen rect) to the
+   *  surface renderer. No-op outside canvas mode. */
+  _pushCanvas() {
+    if (this._mode !== 'canvas') return;
+    const region = this._region();
+    const { left, top } = region;
+    const panes = this.tabs.tabs.filter((t) => t.world).map((t) => {
+      const abs = this._canvasLayout.screenRectFor(t.world, region); // absolute, clamped to the region
+      return {
+        id: t.id,
+        title: t.title || 'New Tab',
+        favicon: t.favicon || '',
+        active: t.id === this.tabs.activeId,
+        loading: !!t.loading,
+        screen: { x: abs.x - left, y: abs.y - top, width: abs.width, height: abs.height }, // region-local
+      };
+    });
+    this.canvas.send(CH.CANVAS_STATE, { on: true, scale: this._camera.scale, panes });
+  }
+
+  /** Re-tile the page views after a camera/world change and refresh the frames. */
+  _canvasRelayout() {
+    this._lastBounds = null; // camera moves don't change window size — bypass the size cache
+    this.layout();
+    this._pushCanvas();
+  }
+
+  /* Gesture handlers (canvas → main, forwarded by ipc.js). All no-op outside canvas mode. */
+  onCanvasPan(dx, dy) {
+    if (this._mode !== 'canvas') return;
+    this._camera.panBy(dx, dy);
+    this._canvasRelayout();
+  }
+  onCanvasZoom(factor, ax, ay) {
+    if (this._mode !== 'canvas') return;
+    this._camera.zoomBy(factor, ax, ay);
+    this._canvasRelayout();
+  }
+  onCanvasPaneMove(id, dx, dy) {
+    if (this._mode !== 'canvas') return;
+    const t = this.tabs.tabs.find((x) => x.id === id);
+    if (!t || !t.world) return;
+    // The drag delta is in screen px; divide by scale to move the pane the same distance in world space.
+    t.world.x += dx / this._camera.scale;
+    t.world.y += dy / this._camera.scale;
+    this._canvasRelayout();
+  }
+  raiseCanvasPane(id) {
+    if (this._mode !== 'canvas') return;
+    this.tabs.activate(id); // → active-page → _setActiveView restacks (pane to top) + refreshes frames
   }
 
   /** IPC trust boundary (defense-in-depth): only this window's own chrome (toolbar) and splitter
@@ -298,6 +442,8 @@ class PaneWindow {
     // The vertical-tabs rail is privileged chrome (same preload as the toolbar) — it drives the
     // tab channels (activate/close/new/move), so it must be trusted alongside the chrome + splitter.
     if (this.sidebar.isSender(wc)) return true;
+    // The canvas surface is privileged chrome too — it drives pan/zoom/move + tab channels (CANVAS.md).
+    if (this.canvas.isSender(wc)) return true;
     return this.dock.isSplitterSender(wc);
   }
 
