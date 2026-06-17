@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('pane', {
   reload: () => ipcRenderer.invoke(CH.RELOAD),
   stop: () => ipcRenderer.invoke(CH.STOP),
   toggleDevTools: () => ipcRenderer.invoke(CH.TOGGLE_DEVTOOLS),
+  setDevtoolsDock: (side) => ipcRenderer.invoke(CH.DEVTOOLS_SET_DOCK, side),
 
   // tab actions → main
   newTab: () => ipcRenderer.invoke(CH.TAB_NEW),

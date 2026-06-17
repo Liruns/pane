@@ -114,6 +114,7 @@ class TabManager extends EventEmitter {
       if (this._closed.length > 25) this._closed.shift();
     }
     this.tabs.splice(idx, 1);
+    this.emit('tab-closed', tab.view); // let the window retire any devtools dock/satellite for this view
 
     if (this.tabs.length === 0) {
       this.emit('all-closed');

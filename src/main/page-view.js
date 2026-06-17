@@ -28,6 +28,8 @@ class PageView extends EventEmitter {
     this._internalLoad = false; // suppress the loading bar for instant local pages
     this._loading = false;      // current load state, re-read on tab activation (toolbar bar/glyph)
     this._certAllow = new Set(); // hosts the user chose to proceed to past a cert error
+    this._dtView = null; // lazily-created devtools host (a WebContentsView; DESIGN §4 docked devtools)
+    this._dtMode = null; // 'right' | 'bottom' | 'detach' | null — this tab's devtools placement
     this._wireEvents();
   }
 
@@ -61,7 +63,9 @@ class PageView extends EventEmitter {
     wc.on('page-favicon-updated', (_e, favs) => this.emit('favicon', (favs && favs[0]) || ''));
     wc.on('found-in-page', (_e, result) => this.emit('found', result));
     wc.on('devtools-opened', () => this.emit('devtools', true));
-    wc.on('devtools-closed', () => this.emit('devtools', false));
+    // Closing from the devtools UI itself (or its detached window) must reset our placement so the
+    // window's next reconcile tears the dock/satellite down — otherwise the icon lies (DESIGN §14).
+    wc.on('devtools-closed', () => { this._dtMode = null; this.emit('devtools', false); });
 
     // Cert errors (DESIGN §14): block by default → the failed load falls to the error page, which
     // offers an explicit "Proceed anyway". Proceeding calls allowCert(host) and reloads; on the
@@ -99,7 +103,12 @@ class PageView extends EventEmitter {
 
   /** Release the webContents when the tab is closed. */
   destroy() {
+    // Drop our listeners FIRST so the closeDevtools() below can't re-enter the window's reconcile
+    // during teardown: closeDevtools sets _dtMode directly and doesn't need the devtools-closed
+    // handler, and suppressing the 'devtools' re-emit here avoids a reconcile against a dying tab.
     this.removeAllListeners();
+    this.closeDevtools();  // close the session while the page wc is still alive
+    this.destroyDtHost();  // then retire the host view
     const wc = this.webContents;
     if (wc && !wc.isDestroyed() && typeof wc.close === 'function') {
       try { wc.close(); } catch { /* already gone */ }
@@ -131,8 +140,57 @@ class PageView extends EventEmitter {
   canGoBack() { return canGoBack(this.webContents); }
   canGoForward() { return canGoForward(this.webContents); }
   isLoading() { return this._loading; }
-  isDevToolsOpen() { const wc = this.webContents; return !wc.isDestroyed() && wc.isDevToolsOpened(); }
+  isDevToolsOpen() { return this._dtMode !== null; }
   allowCert(host) { if (host) this._certAllow.add(host); } // user chose "Proceed anyway" for this host
+
+  /* ── Devtools host (DESIGN §4) ────────────────────────────────────────────
+     The window owns placement; a PageView owns its devtools' contents. Each tab keeps its own
+     host view so devtools state survives tab switches. The page's devtools front-end is rendered
+     INTO this host (setDevToolsWebContents) — the only way to dock devtools inside custom chrome;
+     Chromium's native docking ignores a WebContentsView layout. Detach reparents the same host
+     into a satellite window, so all three modes share one proven mechanism. */
+  get devtoolsView() { return this._dtView; }
+  get devtoolsMode() { return this._dtMode; }
+
+  _ensureDtView() {
+    if (!this._dtView) {
+      this._dtView = new WebContentsView();
+      this._dtView.setBackgroundColor(COLORS.canvas); // dark while devtools paints, never a white flash
+    }
+    return this._dtView;
+  }
+
+  /** Record the desired placement and make sure the host view exists (does not open devtools). */
+  setMode(mode) { this._dtMode = mode; this._ensureDtView(); }
+
+  /** Point the page's devtools at our host and open them. Idempotent; detach mode is honored
+   *  because we control where the host view lives, not Chromium. */
+  ensureOpen() {
+    const wc = this.webContents;
+    if (wc.isDestroyed() || !this._dtView) return;
+    if (!wc.isDevToolsOpened()) {
+      wc.setDevToolsWebContents(this._dtView.webContents);
+      wc.openDevTools({ mode: 'detach' }); // 'detach' = don't let Chromium dock into the native frame
+    }
+  }
+
+  /** Close the devtools session (the host view is kept for reuse until destroyDtHost). */
+  closeDevtools() {
+    this._dtMode = null;
+    const wc = this.webContents;
+    if (!wc.isDestroyed() && wc.isDevToolsOpened()) wc.closeDevTools();
+  }
+
+  /** Tear down the host view itself (on retire/tab-close). */
+  destroyDtHost() {
+    if (this._dtView) {
+      const wc = this._dtView.webContents;
+      if (wc && !wc.isDestroyed() && typeof wc.close === 'function') {
+        try { wc.close(); } catch { /* already gone */ }
+      }
+      this._dtView = null;
+    }
+  }
 
   zoomBy(delta) {
     const wc = this.webContents;
@@ -142,13 +200,6 @@ class PageView extends EventEmitter {
 
   findInPage(text, opts) { if (text) this.webContents.findInPage(text, opts); }
   stopFind() { this.webContents.stopFindInPage('clearSelection'); }
-
-  toggleDevTools() {
-    const wc = this.webContents;
-    // DESIGN §4: detached in v0 (docking into a custom layout is a roadmap item).
-    if (wc.isDevToolsOpened()) wc.closeDevTools();
-    else wc.openDevTools({ mode: 'detach' });
-  }
 }
 
 module.exports = PageView;

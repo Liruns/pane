@@ -4,6 +4,7 @@ const { TABSTRIP_HEIGHT, CHROME_HEIGHT, WINDOW, COLORS } = require('../shared/co
 const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
 const TabManager = require('./tab-manager');
+const DevtoolsDock = require('./devtools-dock');
 const { handlePageKey } = require('./shortcuts');
 const settings = require('./settings');
 const session = require('./session');
@@ -53,6 +54,16 @@ class PaneWindow {
     this._lastBounds = null;
     this._chromeHeight = CHROME_HEIGHT; // grows while an overlay is open; layout() honors it
 
+    // Docked devtools (DESIGN §4) — placement / splitter / detach / persistence live in this
+    // controller, injected with the few window capabilities it needs. The window keeps the layout
+    // math (delegating the page region to dock.layoutInto) and the tab-event bridging.
+    this.dock = new DevtoolsDock({
+      win: this.win,
+      getActiveView: () => this._activeView,
+      relayout: () => { this._lastBounds = null; this.layout(); },
+      sendState: (payload) => { if (!this.win.isDestroyed()) this.chrome.send(CH.DEVTOOLS_STATE, payload); },
+    });
+
     this.win.contentView.addChildView(this.chrome.view);
     this._connect();
 
@@ -69,6 +80,9 @@ class PaneWindow {
     this.win.on('resize', () => this.layout());
     this.win.on('resized', () => { this.layout(); this._saveSession(); });
     this.win.on('moved', () => this._saveSession());
+    // Take any detached devtools windows + per-tab hosts down with the main window. The OS 'X' fires
+    // 'closed' without routing through TabManager teardown, so the dock retires them explicitly.
+    this.win.on('closed', () => this.dock.handleWindowClosed(this.tabs.tabs));
 
     this.chrome.webContents.once('did-finish-load', () => this.tabs.refresh());
   }
@@ -110,9 +124,14 @@ class PaneWindow {
     this._lastBounds = { width, height };
 
     this.chrome.view.setBounds({ x: 0, y: 0, width, height: this._chromeHeight });
-    if (this._activeView) {
-      const top = CHROME_HEIGHT - 1; // 1px overlap hides the seam (DESIGN §5)
-      this._activeView.view.setBounds({ x: 0, y: top, width, height: Math.max(0, height - top) });
+    if (!this._activeView) return;
+
+    const top = CHROME_HEIGHT - 1; // 1px overlap hides the seam (DESIGN §5)
+    const regionH = Math.max(0, height - top);
+    const page = this._activeView.view;
+    // When devtools is docked the dock tiles page │ splitter │ host; otherwise the page fills.
+    if (!this.dock.layoutInto(page, { top, width, regionH })) {
+      page.setBounds({ x: 0, y: top, width, height: regionH });
     }
   }
 
@@ -131,8 +150,7 @@ class PaneWindow {
     this._activeView = view;
     if (view) {
       this.win.contentView.addChildView(view.view, 0); // below the chrome in z-order
-      this._lastBounds = null; // force re-layout for the newly shown view
-      this.layout();
+      this.dock.reconcile(); // swap in this tab's dock (or none) and re-lay everything out
       // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
@@ -144,7 +162,11 @@ class PaneWindow {
     tabs.on('active-page', (view) => this._setActiveView(view));
     tabs.on('all-closed', () => this.win.close());
     tabs.on('loading', (loading) => chrome.send(CH.LOADING, { loading }));
-    tabs.on('devtools', (open) => chrome.send(CH.DEVTOOLS_STATE, { open }));
+    // Any change in the active tab's devtools (open/close/tab-switch) → re-fit the dock and
+    // re-sync the toolbar's icon + dock indicator. The boolean is ignored; placement is the truth.
+    tabs.on('devtools', () => this.dock.refresh());
+    tabs.on('devtools-toggle', () => this.dock.toggle()); // Ctrl+Shift+I (page focus)
+    tabs.on('tab-closed', (view) => this.dock.teardown(view));
     tabs.on('nav-state', (state) => chrome.send(CH.NAV_STATE, state));
     tabs.on('load-error', (err) => chrome.send(CH.LOAD_ERROR, err));
     tabs.on('focus-address', () => chrome.send(CH.FOCUS_ADDRESS));
@@ -159,6 +181,30 @@ class PaneWindow {
       const a = state.tabs.find((t) => t.id === state.activeId);
       win.setTitle(a && a.title && a.title !== 'New Tab' ? `${a.title} — Pane` : 'Pane');
     });
+  }
+
+  /* ── Docked devtools (DESIGN §4) ────────────────────────────────────────────
+     All placement / splitter / detach / persistence lives in DevtoolsDock. The window keeps thin
+     facades for the IPC + keyboard paths and delegates page-region tiling to dock.layoutInto(). */
+  toggleDevtools() { this.dock.toggle(); }            // toolbar click / Ctrl+Shift+I
+  setDevtoolsDock(side) { this.dock.setDock(side); }  // dock picker: 'right' | 'bottom' | 'detach'
+  onSplitterDrag(x, y) { this.dock.onSplitterDrag(x, y); }
+  onSplitterDragEnd() { this.dock.onSplitterDragEnd(); }
+
+  /** IPC trust boundary (defense-in-depth): only this window's own chrome (toolbar) and splitter
+   *  views may drive the window.pane / splitter channels. Page/web views get the scoped
+   *  `paneInternal` bridge (re-validated in internal-ipc) and no raw ipcRenderer, so they can't reach
+   *  the chrome lane — but ipc.js validates every sender through here so the lane never trusts a
+   *  stray view (a compromised/embedded frame, a future extra view) by default.
+   *
+   *  Single-window assumption: ipc.js resolves the window via `getWindow()` (today the one live
+   *  window), so this gate validates against that window's views. The multi-window / canvas future
+   *  must route each message to the *sender's* window before gating — not the current one — or a
+   *  second window's legit chrome would be dropped here. v0 has one window, so this is correct now. */
+  isTrustedChromeSender(wc) {
+    if (this.win.isDestroyed() || !wc) return false;
+    if (wc === this.chrome.webContents) return true;
+    return this.dock.isSplitterSender(wc);
   }
 }
 
