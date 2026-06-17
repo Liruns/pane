@@ -163,7 +163,14 @@ class PaneWindow {
     this._activeView = view;
     if (view) {
       this.win.contentView.addChildView(view.view, 0); // below the chrome in z-order
-      this.dock.reconcile(); // swap in this tab's dock (or none) and re-lay everything out
+      // The active view changed, so the new view must be (re)tiled even when the window size is
+      // unchanged. dock.reconcile() only relayouts when the dock state itself changes (it early-outs
+      // otherwise), so it can't be relied on to size the new view — invalidate the size-cache and
+      // lay out explicitly. Order matters: nulling before reconcile lets a dock-driven relayout
+      // reset _lastBounds so the trailing layout() no-ops instead of tiling twice.
+      this._lastBounds = null;
+      this.dock.reconcile(); // swap in this tab's dock (or none)
+      this.layout();         // tile page │ (splitter │ devtools) for the newly active view
       // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
