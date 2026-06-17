@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('pane', {
   onLoadError: (cb) => ipcRenderer.on(CH.LOAD_ERROR, (_e, d) => cb(d)),
   onWindowActive: (cb) => ipcRenderer.on(CH.WINDOW_ACTIVE, (_e, d) => cb(d)),
   onFocusAddress: (cb) => ipcRenderer.on(CH.FOCUS_ADDRESS, () => cb()),
+  onOpenPalette: (cb) => ipcRenderer.on(CH.OPEN_PALETTE, (_e, d) => cb(d)),
   onTabs: (cb) => ipcRenderer.on(CH.TABS_STATE, (_e, d) => cb(d)),
   onToast: (cb) => ipcRenderer.on(CH.TOAST, (_e, m) => cb(m)),
 });

@@ -8,6 +8,7 @@ import { initWindowControls } from './features/window-controls.js';
 import { initWindowActive } from './features/window-active.js';
 import { initMenu } from './features/menu.js';
 import { initFind } from './features/find.js';
+import { initCommandPalette } from './features/command-palette.js';
 import { initToast } from './features/toast.js';
 
 initTabs();
@@ -18,4 +19,5 @@ initWindowControls();
 initWindowActive();
 initMenu();
 initFind();
+initCommandPalette();
 initToast();

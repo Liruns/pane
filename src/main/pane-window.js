@@ -191,6 +191,13 @@ class PaneWindow {
     tabs.on('load-error', (err) => chrome.send(CH.LOAD_ERROR, err));
     tabs.on('focus-address', () => chrome.send(CH.FOCUS_ADDRESS));
     tabs.on('open-find', () => chrome.send(CH.OPEN_FIND));
+    // The command palette is a full-window modal: focus the chrome so its input gets keys, and hand
+    // the renderer the content height so it can grow the chrome view to cover (and dim) the page.
+    tabs.on('open-palette', () => {
+      if (win.isDestroyed()) return;
+      chrome.webContents.focus();
+      chrome.send(CH.OPEN_PALETTE, { height: win.getContentBounds().height });
+    });
     tabs.on('found', (r) => chrome.send(CH.FOUND_RESULT, r));
     tabs.on('toast', (m) => chrome.send(CH.TOAST, m));
     tabs.on('open-external', (url) => { if (/^https?:/i.test(url)) shell.openExternal(url); });

@@ -38,6 +38,7 @@ module.exports = {
   LOAD_ERROR: 'pane:load-error',
   WINDOW_ACTIVE: 'pane:window-active', // { active } — window focus/blur → chrome inert shift (DESIGN §14)
   FOCUS_ADDRESS: 'pane:focus-address',
+  OPEN_PALETTE: 'pane:open-palette',
   TABS_STATE: 'pane:tabs-state',
   TOAST: 'pane:toast',
 };

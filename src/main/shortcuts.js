@@ -17,6 +17,7 @@ function handlePageKey(tabs, e, input) {
   else if (mod && key === 'tab') { input.shift ? tabs.prevTab() : tabs.nextTab(); e.preventDefault(); }
   else if (mod && key === 'r') { if (active) active.reload(); e.preventDefault(); }
   else if (mod && key === 'f') { tabs.emit('open-find'); e.preventDefault(); }
+  else if (mod && key === 'k') { tabs.emit('open-palette'); e.preventDefault(); }
   else if (mod && key === 'h') { if (active) active.navigate('pane://history/'); e.preventDefault(); }
   else if (mod && key === 'j') { if (active) active.navigate('pane://downloads/'); e.preventDefault(); }
   else if (mod && input.key === ',') { if (active) active.navigate('pane://settings/'); e.preventDefault(); }
