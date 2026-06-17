@@ -12,24 +12,49 @@ import { ICONS } from './lib/icons.js';
 // Only let web favicons into this privileged chrome document (no file:/pane:/js: schemes).
 const SAFE_FAVICON = /^(?:https?|data):/i;
 
+// HUD-only glyphs not in the shared set. Same 24×24 stroke grammar as lib/icons.js so they don't
+// drift from the chrome's icon style; size/color come from CSS (currentColor + width/height).
+const hsvg = (inner, w = 2) =>
+  `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;
+const GLYPHS = {
+  minus: hsvg('<path d="M5 12h14"/>'),
+  plus: ICONS.plus,
+  // "Fit / frame" — four corner brackets, the standard fit-to-view glyph.
+  fit: hsvg('<path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>', 1.8),
+  // "Target / 100%" — concentric reset-to-origin glyph.
+  target: hsvg('<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5"/>', 1.8),
+};
+
 const TITLE_H = 28; // title-bar height in fixed screen px, drawn ABOVE the page rect
+const GRID_STEP = 32; // dot-grid base spacing (region-local px at scale 1); scales with the camera
+// Below these screen sizes a tile is too small to read chrome — hide the title bar (keep ring + shot).
+const TINY_W = 120;
+const TINY_H = 64;
+const KEY_PAN_STEP = 60; // arrow-key pan distance per press (screen px)
 
 const root = $('#canvas');
 const els = new Map(); // pane id → { wrap, shot, ring, titleBar, favicon, titleText, img } (diffed across renders)
 
-let state = { on: false, scale: 1, panes: [] };
+let state = { on: false, scale: 1, camera: { x: 0, y: 0, scale: 1 }, panes: [] };
 let panMoved = false; // set while a pan drag moves, so the trailing click doesn't also raise a tile
 
+const hud = buildHud(); // bottom-right control cluster — a sibling of #canvas so its clicks don't pan
+
 window.pane.onCanvasState((s) => {
-  state = s || { on: false, scale: 1, panes: [] };
+  state = s || { on: false, scale: 1, camera: { x: 0, y: 0, scale: 1 }, panes: [] };
   if (!state.on) {
     clear();
+    hud.el.classList.add('hidden');
     return;
   }
+  hud.el.classList.remove('hidden');
+  updateGrid(state.camera);
+  hud.setZoom(state.scale);
   render(state.panes || []);
 });
 
 initCanvasGestures();
+initKeyboard();
 
 /* ── Render / diff the pane set ──────────────────────────────────────────────
    Each onCanvasState fires on any camera or pane change, so positions move every frame during a
@@ -116,6 +141,8 @@ function createPane(id) {
 function position(rec, p, sc) {
   rec.wrap.classList.toggle('active', !!p.active);
   rec.wrap.classList.toggle('loading', !!p.loading);
+  // Zoomed far out, a tile is too small to read chrome — hide its title bar (keep ring + shot).
+  rec.wrap.classList.toggle('tiny', sc.width < TINY_W || sc.height < TINY_H);
 
   rec.titleBar.style.left = `${sc.x}px`;
   rec.titleBar.style.top = `${sc.y - TITLE_H}px`;
@@ -259,16 +286,149 @@ function initCanvasGestures() {
   on(root, 'pointerup', end);
   on(root, 'pointercancel', end);
 
-  // Wheel zooms about the cursor (region-local offset). Steady factor — felt, not faked.
+  // Plain wheel PANS the camera; Ctrl/Cmd+wheel ZOOMS about the cursor (region-local offset).
+  // Steady factor — felt, not faked. Always preventDefault so the page never scrolls.
   on(root, 'wheel', (e) => {
     e.preventDefault();
-    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    window.pane.canvasZoom(factor, e.offsetX, e.offsetY);
+    if (e.ctrlKey || e.metaKey) {
+      const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+      window.pane.canvasZoom(factor, e.offsetX, e.offsetY);
+    } else {
+      window.pane.canvasPan(-e.deltaX, -e.deltaY);
+    }
   }, { passive: false });
 
-  // Double-click empty space → open a new pane.
+  // Double-click a pane (tile or title bar) → focus it (animated zoom). Empty space → new pane.
   on(root, 'dblclick', (e) => {
-    if (e.target.closest('.pane-title')) return;
-    window.pane.newTab();
+    const pane = e.target.closest('.pane');
+    if (pane) {
+      window.pane.canvasFocusPane(pane.dataset.id);
+    } else {
+      window.pane.newTab();
+    }
+  });
+}
+
+/* ── Dot-grid background ──────────────────────────────────────────────────────
+   A faint radial-dot pattern on #canvas that pans and scales WITH the camera, conveying the
+   infinite pannable surface (DESIGN deference — low-contrast, never competes with the page). The
+   tile size = GRID_STEP × camera.scale and the origin = the camera's region-local pan offset. */
+function updateGrid(camera) {
+  const cam = camera || { x: 0, y: 0, scale: state.scale || 1 };
+  const step = GRID_STEP * (cam.scale || 1);
+  root.style.backgroundSize = `${step}px ${step}px`;
+  root.style.backgroundPosition = `${cam.x || 0}px ${cam.y || 0}px`;
+}
+
+/* ── Canvas HUD: bottom-right zoom / fit / reset / exit cluster ───────────────
+   A sibling of #canvas (appended to <body>), so clicks land on the HUD rather than starting a pan.
+   Position: fixed bottom-right → stays cornered on resize. DESIGN §4 icon-button grammar. */
+function buildHud() {
+  const cx = () => window.innerWidth / 2;
+  const cy = () => window.innerHeight / 2;
+
+  const el = document.createElement('div');
+  el.className = 'canvas-hud hidden'; // revealed by onCanvasState once canvas mode is on
+
+  const btn = (label, html, fn, cls = '') => {
+    const b = document.createElement('button');
+    b.className = `hud-btn${cls ? ' ' + cls : ''}`;
+    b.type = 'button';
+    b.title = label;
+    b.setAttribute('aria-label', label);
+    b.innerHTML = html;
+    on(b, 'click', fn);
+    return b;
+  };
+
+  const sep = () => {
+    const s = document.createElement('span');
+    s.className = 'hud-sep';
+    return s;
+  };
+
+  const zoomOut = btn('Zoom out', GLYPHS.minus, () => window.pane.canvasZoom(1 / 1.1, cx(), cy()));
+  const zoomLabel = document.createElement('button');
+  zoomLabel.className = 'hud-zoom';
+  zoomLabel.type = 'button';
+  zoomLabel.title = 'Reset zoom';
+  zoomLabel.setAttribute('aria-label', 'Reset zoom to 100%');
+  on(zoomLabel, 'click', () => window.pane.canvasReset());
+  const zoomIn = btn('Zoom in', GLYPHS.plus, () => window.pane.canvasZoom(1.1, cx(), cy()));
+
+  const fit = btn('Fit all', GLYPHS.fit, () => window.pane.canvasFit());
+  const reset = btn('Reset zoom', GLYPHS.target, () => window.pane.canvasReset());
+  const exit = btn('Exit canvas', ICONS.close, () => window.pane.setCanvasMode(false));
+
+  el.append(zoomOut, zoomLabel, zoomIn, sep(), fit, reset, exit);
+  document.body.append(el);
+
+  let lastPct = null;
+  const setZoom = (scale) => {
+    const pct = Math.round((scale || 1) * 100);
+    if (pct === lastPct) return; // avoid thrashing text every camera frame
+    lastPct = pct;
+    zoomLabel.textContent = `${pct}%`;
+  };
+  setZoom(state.scale);
+
+  return { el, setZoom };
+}
+
+/* ── Keyboard shortcuts ───────────────────────────────────────────────────────
+   Window-level; ignored while typing in an input/textarea/contenteditable. Zoom is about the
+   canvas center; arrows pan a fixed step; 0 resets, f fits, Escape leaves canvas mode. */
+function initKeyboard() {
+  on(window, 'keydown', (e) => {
+    if (!state.on) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return; // leave OS / app accelerators alone
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+
+    const cx = window.innerWidth / 2;
+    const cy = window.innerHeight / 2;
+
+    switch (e.key) {
+      case '+':
+      case '=':
+        e.preventDefault();
+        window.pane.canvasZoom(1.1, cx, cy);
+        break;
+      case '-':
+        e.preventDefault();
+        window.pane.canvasZoom(1 / 1.1, cx, cy);
+        break;
+      case '0':
+        e.preventDefault();
+        window.pane.canvasReset();
+        break;
+      case 'f':
+      case 'F':
+        e.preventDefault();
+        window.pane.canvasFit();
+        break;
+      case 'ArrowLeft':
+        e.preventDefault();
+        window.pane.canvasPan(KEY_PAN_STEP, 0);
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        window.pane.canvasPan(-KEY_PAN_STEP, 0);
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        window.pane.canvasPan(0, KEY_PAN_STEP);
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        window.pane.canvasPan(0, -KEY_PAN_STEP);
+        break;
+      case 'Escape':
+        e.preventDefault();
+        window.pane.setCanvasMode(false);
+        break;
+      default:
+        break;
+    }
   });
 }
