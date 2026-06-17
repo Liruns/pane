@@ -4,6 +4,7 @@ const { TABSTRIP_HEIGHT, CHROME_HEIGHT, WINDOW, COLORS } = require('../shared/co
 const CH = require('../shared/channels');
 const ChromeView = require('./chrome-view');
 const TabManager = require('./tab-manager');
+const TabLayout = require('./tab-layout');
 const DevtoolsDock = require('./devtools-dock');
 const Sidebar = require('./sidebar');
 const { handlePageKey } = require('./shortcuts');
@@ -51,7 +52,9 @@ class PaneWindow {
 
     this.chrome = new ChromeView();
     this.tabs = new TabManager();
-    this._activeView = null;
+    this._activeView = null;       // the active/focused pane (drives the toolbar, dock, focus)
+    this._mounted = new Set();      // PageViews currently added as child views (visible). Tabs mode
+                                    // mounts just the active view; canvas mode will mount many (CANVAS.md).
     this._lastBounds = null;
     this._chromeHeight = CHROME_HEIGHT; // grows while an overlay is open; layout() honors it
 
@@ -72,6 +75,11 @@ class PaneWindow {
     // tiled left of the page like the devtools dock. Off by default; restored on chrome load below.
     this.sidebar = new Sidebar({ win: this.win, refreshTabs: () => this.tabs.refresh() });
     this._verticalTabs = !!settings.get('verticalTabs');
+
+    // The content-region layout strategy (CANVAS.md): tabs mode today, CanvasLayout later. layout()
+    // does the window-level math and hands the post-rail region to _layout.place(). Swapping this
+    // object swaps the layout mode — the window stays closed to the difference.
+    this._layout = new TabLayout({ dock: this.dock, getActiveView: () => this._activeView });
 
     this.win.contentView.addChildView(this.chrome.view);
     this._connect();
@@ -156,12 +164,10 @@ class PaneWindow {
     const regionH = Math.max(0, height - top);
     // The vertical-tabs rail (when on) takes the region's left edge; the page region starts after it.
     const left = this.sidebar.layout({ top, regionH, width });
-    const page = this._activeView.view;
-    // When devtools is docked the dock tiles page │ splitter │ host within [left, width); otherwise
-    // the page fills the post-rail region.
-    if (!this.dock.layoutInto(page, { left, top, width, regionH })) {
-      page.setBounds({ x: left, y: top, width: width - left, height: regionH });
-    }
+    // Hand the post-rail content region to the active layout strategy. Tabs mode fills it with the
+    // active tab (deferring to the devtools dock for page │ splitter │ host); CanvasLayout will tile
+    // many panes here later (CANVAS.md).
+    this._layout.place({ left, top, width, regionH });
   }
 
   /** Grow/shrink the chrome view to host an overlay (suggestions / menu). The view is
@@ -175,10 +181,9 @@ class PaneWindow {
 
   _setActiveView(view) {
     if (this._activeView === view) return;
-    if (this._activeView) this.win.contentView.removeChildView(this._activeView.view);
     this._activeView = view;
+    this._syncMountedViews(); // mount the set this mode shows (tabs: the active view only)
     if (view) {
-      this.win.contentView.addChildView(view.view, 0); // below the chrome in z-order
       // The active view changed, so the new view must be (re)tiled even when the window size is
       // unchanged. dock.reconcile() only relayouts when the dock state itself changes (it early-outs
       // otherwise), so it can't be relied on to size the new view — invalidate the size-cache and
@@ -190,6 +195,24 @@ class PaneWindow {
       // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
+    }
+  }
+
+  /** Recompute which page views are mounted (visible) for the current layout mode and reconcile the
+   *  child-view set. Tabs mode shows exactly the active view; canvas mode will show many (CANVAS.md). */
+  _syncMountedViews() {
+    this._mountViews(this._activeView ? [this._activeView] : []);
+  }
+
+  /** Mount exactly `list` (PageViews) as child views below the chrome, diffing against what's already
+   *  mounted — add the new, remove the gone. The window's single place a page view becomes visible. */
+  _mountViews(list) {
+    const next = new Set(list);
+    for (const v of this._mounted) {
+      if (!next.has(v)) { this.win.contentView.removeChildView(v.view); this._mounted.delete(v); }
+    }
+    for (const v of next) {
+      if (!this._mounted.has(v)) { this.win.contentView.addChildView(v.view, 0); this._mounted.add(v); } // below the chrome in z-order
     }
   }
 
