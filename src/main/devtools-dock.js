@@ -54,32 +54,67 @@ class DevtoolsDock {
     return Math.max(minDock, Math.min(desired, maxDock));
   }
 
-  /** Tile page │ splitter │ host along the dock axis, within the region starting at `left` (the
-   *  vertical-tabs rail's inset; 0 when off). Returns false when nothing is docked (the caller fills
-   *  the region with the page). Pure geometry — synchronous for resize integrity (DESIGN §5); the
-   *  page absorbs the resize while devtools keeps its clamped extent. The page never starts before
-   *  `left`, so the rail and the dock can never overlap. */
-  layoutInto(page, { left = 0, top, width, regionH }) {
+  /** Pure geometry: the page / splitter / host rects for `region` given the current dock side+size,
+   *  or `{ docked:false }` when nothing is docked. Shared by layoutInto (tabs) and the canvas-mode
+   *  reserve below so rendered/persisted sizes can never diverge. The page never starts before `left`
+   *  (the rail inset), so rail and dock can't overlap. Synchronous for resize integrity (DESIGN §5). */
+  _dockRects({ left = 0, top, width, regionH }) {
     const host = this._dockedHost;
     const S = DEVTOOLS.SPLITTER;
     const availW = Math.max(0, width - left); // region width after the rail inset
     if (this._dockSide === 'right' && host) {
       const dockW = this._clampDock(this._dockSize.right, availW);
       const pageW = Math.max(0, availW - dockW - S);
-      page.setBounds({ x: left, y: top, width: pageW, height: regionH });
-      if (this._splitter) this._splitter.view.setBounds({ x: left + pageW, y: top, width: S, height: regionH });
-      host.setBounds({ x: left + pageW + S, y: top, width: dockW, height: regionH });
-      return true;
+      return {
+        docked: true,
+        page: { x: left, y: top, width: pageW, height: regionH },
+        splitter: { x: left + pageW, y: top, width: S, height: regionH },
+        host: { x: left + pageW + S, y: top, width: dockW, height: regionH },
+      };
     }
     if (this._dockSide === 'bottom' && host) {
       const dockH = this._clampDock(this._dockSize.bottom, regionH);
       const pageH = Math.max(0, regionH - dockH - S);
-      page.setBounds({ x: left, y: top, width: availW, height: pageH });
-      if (this._splitter) this._splitter.view.setBounds({ x: left, y: top + pageH, width: availW, height: S });
-      host.setBounds({ x: left, y: top + pageH + S, width: availW, height: dockH });
-      return true;
+      return {
+        docked: true,
+        page: { x: left, y: top, width: availW, height: pageH },
+        splitter: { x: left, y: top + pageH, width: availW, height: S },
+        host: { x: left, y: top + pageH + S, width: availW, height: dockH },
+      };
     }
-    return false;
+    return { docked: false };
+  }
+
+  /** Tile page │ splitter │ host (tabs mode): position all three and return true, else false (the
+   *  caller fills the region with the page). Behavior is identical to the pre-refactor inline math. */
+  layoutInto(page, region) {
+    const r = this._dockRects(region);
+    if (!r.docked) return false;
+    page.setBounds(r.page);
+    if (this._splitter) this._splitter.view.setBounds(r.splitter);
+    this._dockedHost.setBounds(r.host);
+    return true;
+  }
+
+  /** The sub-region left for the canvas after reserving any docked devtools (CANVAS.md). Pure — no
+   *  side effects — so PaneWindow can ask for it from gesture/push paths without moving the dock.
+   *  Expressed in the canvas region convention ({left, top, width=right-edge, regionH}). */
+  canvasRegionOf(region) {
+    const r = this._dockRects(region);
+    if (!r.docked) return region;
+    return { left: r.page.x, top: r.page.y, width: r.page.x + r.page.width, regionH: r.page.height };
+  }
+
+  /** Canvas mode: position the docked devtools host + splitter (if any) and return the canvas
+   *  sub-region. Unlike layoutInto it doesn't position a "page" — in canvas mode the active pane is
+   *  tiled by CanvasLayout within the returned sub-region, floating on the surface. */
+  placeDockForCanvas(region) {
+    const r = this._dockRects(region);
+    if (r.docked) {
+      if (this._splitter) this._splitter.view.setBounds(r.splitter);
+      this._dockedHost.setBounds(r.host);
+    }
+    return this.canvasRegionOf(region);
   }
 
   /* ── Reconcile (the reducer) ───────────────────────────────────────────────── */

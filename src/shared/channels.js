@@ -32,6 +32,7 @@ module.exports = {
   CANVAS_RESET: 'pane:canvas-reset',           // canvas → main: animate to 100% on the active pane
   CANVAS_FOCUS_PANE: 'pane:canvas-focus-pane', // canvas → main: raise + animate-zoom to a pane {id}
   CANVAS_PANE_RESIZE: 'pane:canvas-pane-resize', // canvas → main: resize a pane {id, edge, dx, dy}
+  CANVAS_PANE_FLING: 'pane:canvas-pane-fling', // canvas → main: release velocity of a pane drag {id, vx, vy} (spring settle)
   CANVAS_CENTER: 'pane:canvas-center',         // canvas → main: center the camera on a world point {wx, wy} (minimap)
   CANVAS_PREFS: 'pane:canvas-prefs',           // canvas → main: surface prefs {reduceMotion} (camera tween honors it)
   TOGGLE_MAXIMIZE: 'pane:toggle-maximize',

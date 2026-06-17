@@ -23,6 +23,26 @@
 }
 #canvas.panning { cursor: grabbing; }
 
+/* The empty-canvas hint — one quiet caption centered in the surface when there's nothing to navigate
+   (canvas.js shows it only for a single 'New Tab' pane). Deference: low-contrast, single line.
+   Centered in the VIEWPORT (position:fixed), not world-anchored, so it never pans with the camera;
+   pointer-events:none so it never blocks a pan or the double-click-to-add. DESIGN §10 voice. */
+.canvas-hint {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1; /* above the dot-grid, below the HUD/minimap popovers (z-index:10) */
+  pointer-events: none;
+  white-space: nowrap;
+  color: var(--fg-faint);
+  font-family: var(--font-ui);
+  font-size: 14px; /* DESIGN §3 Body */
+  line-height: 1.45;
+  letter-spacing: -0.006em;
+}
+.canvas-hint.hidden { display: none; }
+
 /* ── A pane's chrome: an absolutely-positioned group laid out in region-local screen px ──
    .pane is a zero-size anchor at the page rect's top-left; the title bar sits ABOVE it and the
    ring overlays the page rect. Both are pointer targets; the rect interior stays click-through

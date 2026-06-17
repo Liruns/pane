@@ -10,6 +10,7 @@ const CanvasLayout = require('./canvas/canvas-layout');
 const Canvas = require('./canvas/canvas');
 const arrange = require('./canvas/arrange');
 const { resizeWorld } = require('./canvas/resize');
+const { easeInOutCubic, easeOutBack } = require('./canvas/easing');
 const DevtoolsDock = require('./devtools-dock');
 const Sidebar = require('./sidebar');
 const { handlePageKey } = require('./shortcuts');
@@ -116,7 +117,7 @@ class PaneWindow {
     this.win.on('moved', () => this._saveSession());
     // Take any detached devtools windows + per-tab hosts down with the main window. The OS 'X' fires
     // 'closed' without routing through TabManager teardown, so the dock retires them explicitly.
-    this.win.on('closed', () => { this._cancelTween(); this.dock.handleWindowClosed(this.tabs.tabs); this.sidebar.destroy(); this.canvas.destroy(); });
+    this.win.on('closed', () => { this._cancelTween(); this._cancelPaneTween(); this.dock.handleWindowClosed(this.tabs.tabs); this.sidebar.destroy(); this.canvas.destroy(); });
 
     // DESIGN §14: when the app loses focus the chrome goes inert (a subtle muted shift, matching
     // native Win11 inactive-window behavior). The renderer applies the visual; main just reports state.
@@ -198,16 +199,20 @@ class PaneWindow {
     const regionH = Math.max(0, height - top);
     // The vertical-tabs rail (when on) takes the region's left edge; the page region starts after it.
     const left = this.sidebar.layout({ top, regionH, width });
-    // In canvas mode the canvas surface fills the whole region (under the page views); the page
-    // views are then tiled over it by CanvasLayout.
-    if (this._mode === 'canvas') this.canvas.layout({ left, top, width, regionH });
-    // Hand the post-rail content region to the active layout strategy. Tabs mode fills it with the
-    // active tab (deferring to the devtools dock for page │ splitter │ host); CanvasLayout tiles
-    // every pane from the camera (CANVAS.md).
-    this._layout.place({ left, top, width, regionH });
-    // layout() is the single place canvas frames are re-pushed — so a window resize (which calls
-    // layout but not a gesture handler) re-syncs the surface, not just pans/zooms.
-    if (this._mode === 'canvas') this._pushCanvas();
+    const region = { left, top, width, regionH };
+    if (this._mode === 'canvas') {
+      // Reserve any docked devtools (the active pane's) at the window edge; the canvas surface + every
+      // pane tile into the remaining sub-region (CANVAS.md). placeDockForCanvas positions the dock.
+      const cregion = this.dock.placeDockForCanvas(region);
+      this.canvas.layout(cregion);
+      this._layout.place(cregion); // CanvasLayout tiles the panes within the canvas sub-region
+      // layout() is the single canvas re-pusher, so a window resize (which calls layout but no gesture
+      // handler) re-syncs the surface frames, not just pans/zooms.
+      this._pushCanvas(cregion);
+    } else {
+      // Tabs mode: the active tab fills the region, deferring to the dock for page │ splitter │ host.
+      this._layout.place(region);
+    }
   }
 
   /** Grow/shrink the chrome view to host an overlay (suggestions / menu). The view is
@@ -235,8 +240,8 @@ class PaneWindow {
       // lay out explicitly. Order matters: nulling before reconcile lets a dock-driven relayout
       // reset _lastBounds so the trailing layout() no-ops instead of tiling twice.
       this._lastBounds = null;
-      if (this._mode !== 'canvas') this.dock.reconcile(); // canvas mode runs no docked devtools
-      this.layout();         // tile page │ (splitter │ devtools), or the live canvas pane
+      this.dock.reconcile(); // swap in this pane's devtools (docked at the window edge in both modes)
+      this.layout();         // tile page │ (splitter │ devtools), or the live canvas + reserved dock pane
       // Keep keyboard focus on the visible tab — otherwise a tab switch orphans focus
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
@@ -359,13 +364,12 @@ class PaneWindow {
     settings.set('canvasMode', on);
     if (on) {
       if (this.sidebar.enabled) this.setVerticalTabs(false); // the canvas owns the whole region (v1)
-      for (const t of this.tabs.tabs) t.view.closeDevtools();  // no docked devtools over the canvas
-      this.dock.refresh();
       this._ensureWorlds({ grid: true }); // spread existing panes on a grid on entry
       this.canvas.setEnabled(true);
       this._layout = this._canvasLayout;
     } else {
       this._cancelTween();
+      this._cancelPaneTween();
       this.canvas.setEnabled(false);
       this._layout = this._tabLayout;
       // Leaving canvas: undo the live pane's zoom and drop the (now-stale) tiles so tabs mode is clean.
@@ -375,6 +379,7 @@ class PaneWindow {
       }
     }
     this._syncMountedViews(); // mount the active view (canvas restacks the surface under it)
+    this.dock.reconcile();    // re-tile the active pane's devtools for the new mode (edge-docked either way)
     this._lastBounds = null;  // mode changed the whole region — force a full re-tile
     this.layout();            // (canvas branch re-pushes the frames; tabs branch pushes nothing)
     this._sendLayoutState();
@@ -444,7 +449,7 @@ class PaneWindow {
     }
     const from = { x: this._camera.x, y: this._camera.y, scale: this._camera.scale };
     const start = Date.now();
-    const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+    const ease = easeInOutCubic;
     this._tween = setInterval(() => {
       if (this.win.isDestroyed()) { this._cancelTween(); return; }
       const p = Math.min(1, (Date.now() - start) / ms);
@@ -460,11 +465,14 @@ class PaneWindow {
   }
   _cancelTween() { if (this._tween) { clearInterval(this._tween); this._tween = null; } }
 
-  /** The current content region (right of the rail, below the chrome) in window coords. */
+  /** The canvas content region (right of the rail, below the chrome, minus any docked devtools) in
+   *  window coords. Pure (canvasRegionOf has no side effects), so gesture/push paths can read it
+   *  without moving the dock. */
   _region() {
     const { width, height } = this.win.getContentBounds();
     const top = CHROME_HEIGHT - 1;
-    return { left: this.sidebar.width(), top, width, regionH: Math.max(0, height - top) };
+    const full = { left: this.sidebar.width(), top, width, regionH: Math.max(0, height - top) };
+    return this.dock.canvasRegionOf(full);
   }
 
   /** The single live pane (the active one) adapted for CanvasLayout: its world rect + a setBounds
@@ -487,9 +495,8 @@ class PaneWindow {
   /** Push the canvas state to the surface renderer: the camera scale + every pane's region-local
    *  clamped screen rect, plus a frozen snapshot for the non-live panes (the active one is the live
    *  native view, so it sends no snapshot — the surface leaves a hole there). No-op outside canvas. */
-  _pushCanvas() {
+  _pushCanvas(region = this._region()) {
     if (this._mode !== 'canvas') return;
-    const region = this._region();
     const { left, top } = region;
     const activeId = this.tabs.activeId;
     const panes = this.tabs.tabs.filter((t) => t.world).map((t) => {
@@ -569,6 +576,7 @@ class PaneWindow {
   onCanvasPaneMove(id, dx, dy) {
     if (this._mode !== 'canvas') return;
     this._cancelTween();
+    this._cancelPaneTween(); // a fresh grab cancels a pane still settling from a previous fling
     const t = this.tabs.tabs.find((x) => x.id === id);
     if (!t || !t.world) return;
     // The drag delta is in screen px; divide by scale to move the pane the same distance in world space.
@@ -579,12 +587,42 @@ class PaneWindow {
   onCanvasPaneResize(id, edge, dx, dy) {
     if (this._mode !== 'canvas') return;
     this._cancelTween();
+    this._cancelPaneTween();
     const t = this.tabs.tabs.find((x) => x.id === id);
     if (!t || !t.world) return;
     const s = this._camera.scale; // screen delta → world delta
     t.world = resizeWorld(t.world, edge, dx / s, dy / s, CANVAS.MIN_PANE);
     this._canvasRelayout();
   }
+  /** Release velocity of a pane drag (screen px/ms) → glide on with a spring overshoot to rest
+   *  (DESIGN §15 gesture motion). Skipped under reduced motion or below a flick threshold. */
+  onCanvasPaneFling(id, vx, vy) {
+    if (this._mode !== 'canvas' || this._reduceMotion) return;
+    if (Math.hypot(vx, vy) < 0.05) return; // too slow to be a throw
+    const t = this.tabs.tabs.find((x) => x.id === id);
+    if (!t || !t.world) return;
+    const s = this._camera.scale;
+    const PROJECT = 140; // how far the throw carries (ms-equivalent), in world units after ÷scale
+    this._animatePaneWorld(t, t.world.x + (vx / s) * PROJECT, t.world.y + (vy / s) * PROJECT, 420);
+  }
+
+  /** Spring-settle a pane's world position to (tx,ty) over `ms` (easeOutBack overshoot), re-tiling
+   *  each frame. One pane tween at a time; cancelled by a new grab/resize or leaving canvas. */
+  _animatePaneWorld(tab, tx, ty, ms) {
+    this._cancelPaneTween();
+    const from = { x: tab.world.x, y: tab.world.y };
+    const start = Date.now();
+    this._paneTween = setInterval(() => {
+      if (this.win.isDestroyed() || this._mode !== 'canvas') { this._cancelPaneTween(); return; }
+      const p = Math.min(1, (Date.now() - start) / ms);
+      const k = easeOutBack(p);
+      tab.world.x = from.x + (tx - from.x) * k;
+      tab.world.y = from.y + (ty - from.y) * k;
+      this._canvasRelayout();
+      if (p >= 1) this._cancelPaneTween();
+    }, 16);
+  }
+  _cancelPaneTween() { if (this._paneTween) { clearInterval(this._paneTween); this._paneTween = null; } }
   /** Center the camera on a world point (the minimap click/drag-to-navigate), keeping zoom. */
   centerCanvasOn(wx, wy) {
     if (this._mode !== 'canvas') return;

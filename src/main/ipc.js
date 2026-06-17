@@ -61,6 +61,7 @@ function registerIpc(resolveWindow) {
   handle(CH.CANVAS_RESET, (e) => { const w = winOf(e); if (w) w.resetCanvas(); });
   handle(CH.CANVAS_FOCUS_PANE, (e, id) => { const w = winOf(e); if (w) w.focusCanvasPane(id); });
   on(CH.CANVAS_PANE_RESIZE, (e, id, edge, dx, dy) => { const w = winOf(e); if (w) w.onCanvasPaneResize(id, edge, dx, dy); });
+  on(CH.CANVAS_PANE_FLING, (e, id, vx, vy) => { const w = winOf(e); if (w) w.onCanvasPaneFling(id, vx, vy); });
   on(CH.CANVAS_CENTER, (e, wx, wy) => { const w = winOf(e); if (w) w.centerCanvasOn(wx, wy); });
   on(CH.CANVAS_PREFS, (e, prefs) => { const w = winOf(e); if (w) w.setCanvasPrefs(prefs); });
 

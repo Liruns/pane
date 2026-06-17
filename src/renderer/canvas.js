@@ -46,6 +46,15 @@ const HANDLES = [
 ];
 
 const root = $('#canvas');
+
+// The empty-canvas hint: one quiet caption centered in the surface when there's nothing to navigate
+// (exactly one pane, the 'New Tab' start page). Fixed/centered in the viewport — NOT world-anchored —
+// and pointer-events:none so it never blocks a pan or the double-click-to-add. Toggled from state.
+const hint = document.createElement('div');
+hint.className = 'canvas-hint hidden';
+hint.textContent = 'Double-click to add a pane.';
+root.append(hint);
+
 const els = new Map(); // pane id → { wrap, shot, ring, titleBar, favicon, titleText, img } (diffed across renders)
 // Frozen-tile bitmaps (pane id → data: URL). Decoupled from per-frame CANVAS_STATE: snapshots arrive
 // on their own onCanvasSnapshot channel only when they change, so the per-frame state stays light.
@@ -82,6 +91,7 @@ window.pane.onCanvasState((s) => {
   state = s || { on: false, scale: 1, camera: { x: 0, y: 0, scale: 1 }, panes: [] };
   if (!state.on) {
     clear();
+    hint.classList.add('hidden');
     hud.el.classList.add('hidden');
     minimap.el.classList.add('hidden');
     return;
@@ -90,7 +100,11 @@ window.pane.onCanvasState((s) => {
   updateMinimapVisibility();
   updateGrid(state.camera);
   hud.setZoom(state.scale);
-  render(state.panes || []);
+  const panes = state.panes || [];
+  render(panes);
+  // The empty-canvas hint: visible only when the surface is effectively empty — exactly one pane,
+  // still the 'New Tab' start page. Any second pane or a renamed pane hides it.
+  hint.classList.toggle('hidden', !(panes.length === 1 && panes[0].title === 'New Tab'));
   minimap.update(state);
 });
 
@@ -322,6 +336,11 @@ function initTitleDrag(titleBar, id) {
   let moved = false;
   let px = 0;
   let py = 0;
+  // Release-velocity tracking for the fling, mirroring the canvas-pan inertia. vx/vy are EMA-smoothed
+  // px/ms; lastT is the last pointermove timestamp so we divide each delta by the real frame gap.
+  let vx = 0;
+  let vy = 0;
+  let lastT = 0;
 
   on(titleBar, 'pointerdown', (e) => {
     if (e.button !== 0) return;
@@ -331,6 +350,9 @@ function initTitleDrag(titleBar, id) {
     moved = false;
     px = e.clientX;
     py = e.clientY;
+    vx = 0;
+    vy = 0;
+    lastT = e.timeStamp;
     titleBar.classList.add('dragging');
     titleBar.setPointerCapture(e.pointerId);
     e.preventDefault();
@@ -344,6 +366,13 @@ function initTitleDrag(titleBar, id) {
     px = e.clientX;
     py = e.clientY;
     moved = true;
+    // Track velocity (px/ms), lightly EMA-smoothed so a single jittery sample can't fling the settle.
+    const dt = e.timeStamp - lastT;
+    lastT = e.timeStamp;
+    if (dt > 0) {
+      vx = 0.7 * vx + 0.3 * (dx / dt);
+      vy = 0.7 * vy + 0.3 * (dy / dt);
+    }
     window.pane.canvasPaneMove(id, dx, dy);
   });
 
@@ -352,6 +381,10 @@ function initTitleDrag(titleBar, id) {
     dragging = false;
     titleBar.classList.remove('dragging');
     try { titleBar.releasePointerCapture(e.pointerId); } catch { /* already released */ }
+    // Fling the pane on release: the §15 gesture spring (main runs the settle). Only when the drag
+    // moved, the OS isn't reducing motion, and the throw was fast enough to read as intentional.
+    // Skip the round-trip entirely under reduced motion (main applies the same gate).
+    if (moved && !reduceMotion && Math.hypot(vx, vy) > 0.05) window.pane.canvasPaneFling(id, vx, vy);
   };
   on(titleBar, 'pointerup', end);
   on(titleBar, 'pointercancel', end);
