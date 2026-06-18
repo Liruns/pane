@@ -22,7 +22,7 @@ body { background: #0a0a0b; color: var(--fg); font-family: var(--font-ui); overf
 .head {
   position: sticky; top: 0; z-index: 1; background: #0a0a0b;
   display: flex; align-items: center; gap: 16px;
-  padding: 28px max(24px, 8vw) 16px; border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 28px max(24px, 8vw) 16px; border-bottom: 1px solid rgba(255,255,255,0.09); /* DESIGN §2 hairline */
 }
 .head h1 { flex: none; margin: 0; font-size: 24px; font-weight: 590; letter-spacing: -0.015em; }
 
