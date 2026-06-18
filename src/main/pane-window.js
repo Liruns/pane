@@ -383,7 +383,9 @@ class PaneWindow {
      owns only the surface view. Only the active pane stays a LIVE native view (with true setZoomFactor
      zoom); the rest are frozen snapshot tiles the surface renders — so just one renderer is live.
      Drag the canvas to pan, wheel to zoom, drag a pane's title bar to move it, click a tile to make it
-     live. Devtools docking and the rail are off in canvas mode (they'd fight the surface for the region). */
+     live. The rail is forced off in canvas mode (it would fight the surface for the region); docked
+     devtools stays — dock.placeDockForCanvas() reserves it at the window edge and the panes tile into
+     the remainder, so the active pane keeps its devtools either way. */
   setCanvasMode(on) {
     if (this.win.isDestroyed()) return;
     on = !!on;
