@@ -66,8 +66,9 @@
   overflow: hidden;
 }
 .pane-shot.hidden { display: none; }
-/* A pane not yet snapshotted reads as a quiet empty surface (the ring + title still mark it). */
-.pane-shot.empty { background-color: #131315; }
+/* A pane not yet snapshotted reads as a quiet empty surface (the ring + title still mark it):
+   one step lighter than the canvas void it sits on (DESIGN §6 — elevation on dark is a step lighter). */
+.pane-shot.empty { background-color: var(--surface); }
 
 /* The 1px border ring around the page rect — border-as-light (DESIGN §2/§6), no drop shadow.
    `box-sizing: border-box` keeps the border outside the page content visually; the interior is
@@ -131,7 +132,7 @@
   position: absolute;
   width: 12px;
   height: 12px;
-  border-radius: 3px; /* tight chip (≤ radius.xs) */
+  border-radius: 4px; /* tight chip = radius.xs */
   background: rgba(41, 151, 255, 0.18); /* --accent-dark, faint */
   border: 1px solid var(--accent-dark);
   transition: background var(--motion-fast) var(--ease-standard);
@@ -295,7 +296,7 @@
   position: absolute;
   border: 1px solid var(--hairline-strong);
   background: rgba(255, 255, 255, 0.05);
-  border-radius: 2px;
+  border-radius: 4px; /* radius.xs */
 }
 /* The active pane reads in the single accent — firmer edge + a faint accent wash. */
 .minimap-rect.active {
@@ -307,7 +308,7 @@
 .minimap-viewport {
   position: absolute;
   border: 1px solid var(--fg-muted);
-  border-radius: 2px;
+  border-radius: 4px; /* radius.xs */
   pointer-events: none; /* never block a navigate drag */
 }
 
