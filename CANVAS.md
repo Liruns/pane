@@ -1,9 +1,11 @@
 # Infinite Canvas — Architecture & Plan
 
-> Status: **planning + groundwork**. No canvas feature ships yet. This document is the design
-> contract for the deferred infinite-canvas mode (DESIGN.md §11), plus a record of the prep
-> already landed. Precedence still holds: **DESIGN.md > preferences.md > this doc**; nothing here
-> overrides a design principle, it only plans how to honor them at canvas scale.
+> Status: **built behind a default-off flag (`canvasMode`).** The infinite-canvas mode (DESIGN.md §11)
+> is implemented end-to-end — roadmap phases 1–6 landed and on-machine verified, 7 nearly so — but stays
+> **off by default**, so v0's default behavior is unchanged (scope discipline, DESIGN §6/§11). This
+> document is both the design contract and the record of what shipped. Precedence still holds:
+> **DESIGN.md > preferences.md > this doc**; nothing here overrides a design principle, it only plans
+> how to honor them at canvas scale.
 
 ## 1. The vision (from DESIGN §11)
 
@@ -145,20 +147,26 @@ Each phase is shippable and leaves v0 behavior intact until the flag flips.
 4. **✅ Static + zoom canvas (v1)** — behind the `canvasMode` setting (default off), the `Canvas`
    controller mounts a `CanvasView` surface; `PaneWindow` owns the `Camera` + per-tab world rects,
    tiles every pane via `CanvasLayout`, and handles pan (drag) / zoom (wheel) / pane-move (drag a
-   title bar) / raise. All panes stay **live** (no snapshots yet). **Needs on-machine GUI verification**
-   — the input/z-order model (canvas DOM behind native page views) is unverifiable headless.
+   title bar) / raise. All panes stay **live** (no snapshots yet). The input/z-order model (canvas DOM
+   behind native page views) is unverifiable headless, so it's gated on-machine by
+   **`scripts/canvas-verify.js`** (`npm run verify:canvas`) — a Playwright `_electron` driver that
+   drives pan / zoom / pane-move / fit through the main process and asserts the resulting camera/world
+   state (11/11 green on-machine).
 5. **✅ Zoom via focused-live / frozen-tiles** — the active pane is the one live renderer (true
    `setZoomFactor` zoom); every other pane is a downscaled `capturePage` snapshot tile. So N panes
    cost one live renderer, not N.
-6. **◑ Gestures + commands** — landed: animated **fit / reset / focus** camera tweens (easeInOutCubic),
+6. **✅ Gestures + commands** — animated **fit / reset / focus** camera tweens (easeInOutCubic),
    **pane resize handles** (8-way, active pane), a **minimap** overview navigator, **dot-grid** pan
    surface, **wheel-pan + Ctrl/⌘-wheel zoom** (trackpad pinch rides the same ctrl+wheel path Chromium
-   synthesizes), and keyboard (`+/-/0/F/arrows/Esc`). Still open: **spring physics / momentum-inertia**
-   on drag + fling (DESIGN §15 `ease-spring` — the surface springs were reserved for).
-7. **◑ Persistence + polish** — landed: world rects + camera pose in the session (restored by index).
-   Still open: per-pane devtools in canvas mode, reduced-motion on the camera tween, an empty-canvas
-   start affordance, and lifting the v1 constraints (the rail + docked devtools are forced off in
-   canvas mode today; overlapping panes can hide a tile's title bar).
+   synthesizes), keyboard (`+/-/0/F/arrows/Esc`), and the gesture motion DESIGN §15 reserved springs
+   for: **pan momentum-inertia** (a friction-decay glide on fling) + a **pane-fling spring**
+   (`easeOutBack` overshoot settle, run in main). Both honor OS reduced-motion.
+7. **◑ Persistence + polish** — landed: world rects + camera pose in the session (restored by index);
+   **per-pane docked devtools** in canvas mode (the active/live pane's dock follows it at the window
+   edge); **reduced-motion** gating the camera tween, pan inertia, and the pane fling; and a quiet
+   **empty-canvas hint**. Still open: lifting the last v1 constraint — the **vertical-tabs rail** is
+   still forced off on entry (the canvas owns the whole region); and overlapping panes can still hide a
+   tile's title bar.
 
 ### Commands / channels (canvas lane, all trusted-chrome, no-op outside canvas mode)
 `SET_CANVAS_MODE` · `CANVAS_PAN` · `CANVAS_ZOOM` · `CANVAS_PANE_MOVE` · `CANVAS_PANE_RESIZE` ·
@@ -176,8 +184,9 @@ main → surface: `CANVAS_STATE` (camera, region, per-pane screen+world+snapshot
 - **Session model for multiple windows.** v0 persists one window's snapshot (`before-quit` saves the
   focused one). Multi-window / canvas needs a richer session schema (per-window, per-pane world
   rects). Deferred; flagged in `index.js`.
-- **Devtools per pane.** `DevtoolsDock` assumes one host region in the window. In canvas mode each
-  pane may want its own docked devtools — a per-pane dock, or detach-only on canvas. To decide.
+- **Devtools per pane.** *Resolved.* `DevtoolsDock` keeps one host region at the window edge; in canvas
+  mode it follows the active/live pane (only one pane is live at a time), so that pane's devtools docks
+  exactly as in tabs mode. A true many-panes-docked-at-once view is out of scope while only one is live.
 - **WCO / Mica interaction.** Unchanged — the toolbar still owns the top strip and WCO; the canvas is
   the page region. No new platform-chrome surface.
 - **Zoom fidelity.** `setZoomFactor` reflows the page (it's not a pixel scale), so a zoomed live pane
