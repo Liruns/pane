@@ -202,6 +202,27 @@ class DevtoolsDock {
     this.emitState();
   }
 
+  /** Right-click → Inspect Element. Open this tab's devtools in Pane's managed host (never Chromium's
+   *  own docked window) at the preferred side, then point the inspector at (x, y). If a session is
+   *  already live, inspect immediately; otherwise inspect once it opens — calling inspectElement
+   *  before the front-end attaches would make Chromium spawn its own docked devtools, bypassing the
+   *  host machinery. Coords are page-local (from the context-menu params), exactly what it expects. */
+  inspectElement(x, y) {
+    const view = this._host.getActiveView();
+    if (!view) return;
+    const wc = view.webContents;
+    if (wc.isDestroyed()) return;
+    const px = Math.round(x), py = Math.round(y);
+    if (wc.isDevToolsOpened()) { wc.inspectElement(px, py); return; }
+    // Inspect once devtools attaches. If the tab is torn down before it ever opens, drop the pending
+    // listener so it can't dangle; each handler also clears the other so repeated inspects don't pile up.
+    const onOpened = () => { wc.removeListener('destroyed', onDestroyed); if (!wc.isDestroyed()) wc.inspectElement(px, py); };
+    const onDestroyed = () => wc.removeListener('devtools-opened', onOpened);
+    wc.once('devtools-opened', onOpened);
+    wc.once('destroyed', onDestroyed);
+    this.setDock(this._dockPref); // setMode + reconcile + ensureOpen, at the remembered side
+  }
+
   /** A tab closed: drop its dock/satellite and retire its host so nothing dangles. */
   teardown(view) { this._dispose(view); }
 

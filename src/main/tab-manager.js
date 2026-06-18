@@ -9,7 +9,7 @@ const history = require('./history');
  * tab's view is shown by the window; background tabs keep running.
  *
  * Emits: 'active-page'(PageView), 'tabs'(state), 'all-closed', 'focus-address',
- *        re-emits the ACTIVE tab's 'loading'/'nav-state'/'load-error', and any
+ *        re-emits the ACTIVE tab's 'loading'/'nav-state'/'load-error'/'inspect', and any
  *        tab's 'open-external'.
  */
 class TabManager extends EventEmitter {
@@ -37,8 +37,9 @@ class TabManager extends EventEmitter {
   }
   _emitTabs() { this.emit('tabs', this._state()); }
 
-  /** Open a tab. `index` (optional) inserts it at that slot; default appends to the end. */
-  newTab(url, index) {
+  /** Open a tab. `index` (optional) inserts it at that slot; default appends to the end.
+   *  `opts.background` opens it without stealing focus (a context-menu "Open in New Tab"). */
+  newTab(url, index, opts) {
     const id = ++this._seq;
     const view = new PageView();
     const tab = { id, view, title: 'New Tab', url: '', loading: false, favicon: '' };
@@ -66,9 +67,20 @@ class TabManager extends EventEmitter {
     view.on('load-error', (err) => { if (id === this.activeId) this.emit('load-error', err); });
     view.on('devtools', (open) => { if (id === this.activeId) this.emit('devtools', open); });
     view.on('open-external', (u) => this.emit('open-external', u));
+    // Right-click menu: open a link/image/search in a tab right after this one; route Inspect to the
+    // window (it owns the devtools dock). Inspect only fires on the active tab — the menu can't open
+    // on an unmounted background view — but gate it anyway.
+    view.on('open-tab', (u, o) => {
+      const i = this.tabs.findIndex((t) => t.id === id);
+      this.newTab(u, i === -1 ? undefined : i + 1, o); // source tab already gone → append, not index 0
+    });
+    view.on('inspect', (x, y) => { if (id === this.activeId) this.emit('inspect', x, y); });
     view.webContents.on('before-input-event', (e, input) => handlePageKey(this, e, input));
 
-    this.activate(id);
+    // Background tabs load without stealing focus; the first tab must activate regardless (there's
+    // no other active tab to keep). Either way _emitTabs runs so the strip shows the newcomer.
+    const background = !!(opts && opts.background) && this.activeId !== null;
+    if (background) this._emitTabs(); else this.activate(id);
     if (url) view.navigate(url); else view.loadStart();
     return id;
   }

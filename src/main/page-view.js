@@ -3,6 +3,7 @@ const path = require('node:path');
 const { WebContentsView } = require('electron');
 const { EventEmitter } = require('node:events');
 const { canGoBack, canGoForward, goBack, goForward } = require('./nav-history');
+const { attachPageContextMenu } = require('./page-context-menu');
 const { COLORS } = require('../shared/config');
 
 const isInternalUrl = (u) => typeof u === 'string' && u.startsWith('pane://');
@@ -11,7 +12,8 @@ const isInternalUrl = (u) => typeof u === 'string' && u.startsWith('pane://');
  * One web-page surface — a native WebContentsView plus its navigation behavior.
  * Internal surfaces (new-tab, error, …) are served over the pane:// protocol.
  * Emits: 'loading'(bool), 'nav-state'(...), 'load-error'(...), 'title'(string),
- *        'favicon'(url), 'navigated'(url), 'found'(result), 'open-external'(url).
+ *        'favicon'(url), 'navigated'(url), 'found'(result), 'open-external'(url),
+ *        'open-tab'(url, {background}), 'inspect'(x, y)  — the last two from the right-click menu.
  */
 class PageView extends EventEmitter {
   constructor() {
@@ -87,6 +89,10 @@ class PageView extends EventEmitter {
     wc.on('will-navigate', (e, url) => {
       if (url.startsWith('pane://') && !wc.getURL().startsWith('pane://')) e.preventDefault();
     });
+
+    // Native right-click menu (link / image / editable / selection / page + Inspect). Its
+    // orchestrated actions bubble back out as this view's 'open-tab' / 'inspect' events.
+    attachPageContextMenu(this);
   }
 
   _emitState() {

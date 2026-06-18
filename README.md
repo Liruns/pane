@@ -81,6 +81,10 @@ A focused daily driver — everything below is hand-built chrome, no accounts, n
   [`tldts`](https://github.com/remusao/tldts) bundle) plus a package denylist (`socket.io`,
   `node.js`…); with a Go-to / Search **suggestion dropdown** and **history autocomplete**.
 - **Navigation** — back / forward / reload↔stop, a trickle **loading bar** that aborts on failure.
+- **In-page context menu** — a native right-click menu, contextual to what you clicked: open a link or
+  image in a background tab, copy / save it, copy or **search** a selection, spellcheck fixes in
+  editable fields, page back / forward / reload, and **Inspect Element** (routed into Pane's own
+  dockable devtools, never Chromium's docked window).
 - **`pane://` internal pages** — new-tab start page, custom error page, and:
   - **History** (`Ctrl+H`) — per-visit log grouped by day, search, per-row delete.
   - **Bookmarks** (`Ctrl+D` to toggle) — flat list, search, delete; a quiet toast confirms.

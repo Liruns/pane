@@ -299,6 +299,7 @@ class PaneWindow {
     // re-sync the toolbar's icon + dock indicator. The boolean is ignored; placement is the truth.
     tabs.on('devtools', () => this.dock.refresh());
     tabs.on('devtools-toggle', () => this.dock.toggle()); // Ctrl+Shift+I (page focus)
+    tabs.on('inspect', (x, y) => this.dock.inspectElement(x, y)); // right-click → Inspect Element
     tabs.on('toggle-vertical-tabs', () => this.setVerticalTabs(!this.sidebar.enabled)); // Ctrl+Shift+E
     tabs.on('tab-closed', (view) => this.dock.teardown(view));
     tabs.on('nav-state', (state) => chrome.send(CH.NAV_STATE, state));
