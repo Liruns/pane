@@ -77,9 +77,9 @@ A focused daily driver — everything below is hand-built chrome, no accounts, n
   **drag-to-reorder**, a **right-click menu** (reload / duplicate / close / close others),
   and **reopen-closed** (`Ctrl+Shift+T`).
 - **Smart address bar** — scheme / `localhost` / IPv4 / IPv6 / IDN / Windows-path → load, else
-  search; real-host decisions use the bundled **IANA TLD list** (`lib/tlds.js`) plus a
-  package denylist (`socket.io`, `node.js`…); with a Go-to / Search **suggestion dropdown**
-  and **history autocomplete**.
+  search; real-host decisions use the **Public Suffix List** (`lib/host.js`, backed by a vendored
+  [`tldts`](https://github.com/remusao/tldts) bundle) plus a package denylist (`socket.io`,
+  `node.js`…); with a Go-to / Search **suggestion dropdown** and **history autocomplete**.
 - **Navigation** — back / forward / reload↔stop, a trickle **loading bar** that aborts on failure.
 - **`pane://` internal pages** — new-tab start page, custom error page, and:
   - **History** (`Ctrl+H`) — per-visit log grouped by day, search, per-row delete.

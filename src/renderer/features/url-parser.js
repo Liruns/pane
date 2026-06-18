@@ -1,9 +1,9 @@
 // Smart address parsing — DESIGN.md §10. Pure function (no DOM/IPC), unit-testable.
-// Uses the URL API for IDN→punycode + validation, and the bundled IANA TLD list
-// (lib/tlds.js — the Public Suffix List's top level) to decide whether a dotted token
-// is a real host or a search. A dotted host that turns out dead is still rescued by the
-// custom error page's "Search instead".
-import { TLDS } from '../lib/tlds.js';
+// Uses the URL API for IDN→punycode + validation, and the Public Suffix List (lib/host.js,
+// backed by the vendored tldts bundle) to decide whether a dotted token is a real host or a
+// search. A dotted host that turns out dead is still rescued by the custom error page's
+// "Search instead".
+import { isRegistrableHost } from '../lib/host.js';
 
 export const SEARCH_BASE = 'https://www.google.com/search?q=';
 export const search = (q) => SEARCH_BASE + encodeURIComponent(q);
@@ -64,8 +64,8 @@ export function toNavURL(raw) {
     // "looks-like-a-package" tokens resolve to search, never auto-load.
     if (PACKAGE_DENYLIST.has(host.toLowerCase())) return search(s);
     if (URL.canParse(proto + s)) {
-      const tld = new URL(proto + s).hostname.split('.').pop() || ''; // IDN → punycode
-      if (TLDS.has(tld)) return proto + s; // honor :443⇒https, else http (dev servers) — DESIGN §10.3
+      const hostname = new URL(proto + s).hostname; // IDN → punycode
+      if (isRegistrableHost(hostname)) return proto + s; // honor :443⇒https, else http (dev servers) — DESIGN §10.3
     }
   }
 

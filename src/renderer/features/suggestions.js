@@ -5,7 +5,7 @@ import { $, on } from '../lib/dom.js';
 import { toNavURL, search, SEARCH_BASE } from './url-parser.js';
 import { openOverlay, closeOverlay } from '../lib/overlay.js';
 import { ICONS } from '../lib/icons.js';
-import { TLDS } from '../lib/tlds.js';
+import { isRegistrableHost } from '../lib/host.js';
 
 const ROW_H = 36;
 
@@ -69,8 +69,7 @@ function actions(s) {
     // decimals/filenames (1.5, file.txt) don't get a misleading Go-to. Search stays the default
     // (nothing pre-selected); the host is one keystroke away. DESIGN §10.4/§12 (a URL never lies).
     if (!/\s/.test(s) && s.includes('.') && URL.canParse('https://' + s)) {
-      const tld = new URL('https://' + s).hostname.split('.').pop() || '';
-      if (TLDS.has(tld)) return [{ icon: 'go', label: `Go to ${s}`, url: 'https://' + s }, se];
+      if (isRegistrableHost(new URL('https://' + s).hostname)) return [{ icon: 'go', label: `Go to ${s}`, url: 'https://' + s }, se];
     }
     return [se];
   }
