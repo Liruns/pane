@@ -229,6 +229,42 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   await capCanvas('3-after-fit.png');
   osShot('os-3-after-fit.png');
 
+  // ── Camera-on-activate (regression gate for the activation chokepoint) ───────────────────────────
+  // The command palette / tab strip activate a pane via tabs.activate → active-page → _setActiveView,
+  // which MUST frame the pane (a pane must never go live off-screen). Prove it the only honest way:
+  // park a chosen pane fully off-screen (precondition), activate it via tabs.activate (NOT
+  // focusCanvasPane — that path was never broken), then assert the camera brought it back into view.
+  const preAct = await app.evaluate((_electron, winPath) => {
+    const W = process.mainModule.require(winPath);
+    const w = W.focused() || W.all()[0];
+    const target = w.tabs.tabs.find((x) => x.id !== w.tabs.activeId && x.world) || w.tabs.tabs.find((x) => x.world);
+    let r; try { r = w._region(); } catch { r = { width: 1200, regionH: 760 }; }
+    const sc = w._camera.scale; // shove the camera so the target sits far off the left edge (keep scale)
+    w._camera.set({ x: -(target.world.x + target.world.width) * sc - 4000, y: w._camera.y, scale: sc });
+    const s = w._camera.worldRectToScreen(target.world);
+    const off = (s.x + s.width) <= 0 || s.x >= (r.width || 1200) || (s.y + s.height) <= 0 || s.y >= (r.regionH || 760);
+    return { id: target.id, off };
+  }, W_PATH);
+  check('activate precondition: pane parked off-screen', preAct.off, String(preAct.off));
+  await app.evaluate((_electron, [winPath, id]) => {
+    const W = process.mainModule.require(winPath);
+    const w = W.focused() || W.all()[0];
+    w.tabs.activate(id); // the exact path the command palette / tab strip use
+  }, [W_PATH, preAct.id]);
+  await sleep(700); // let the frame-the-pane camera tween settle
+  const postAct = await app.evaluate((_electron, winPath) => {
+    const W = process.mainModule.require(winPath);
+    const w = W.focused() || W.all()[0];
+    const t = w.tabs.tabs.find((x) => x.id === w.tabs.activeId);
+    let r; try { r = w._region(); } catch { r = { width: 1200, regionH: 760 }; }
+    const s = w._camera.worldRectToScreen(t.world);
+    const cx = s.x + s.width / 2, cy = s.y + s.height / 2;
+    return { activeId: w.tabs.activeId, centered: cx > 0 && cx < (r.width || 1200) && cy > 0 && cy < (r.regionH || 760) };
+  }, W_PATH);
+  report.steps.push({ step: 'activate-frames-pane', target: preAct.id, ...postAct });
+  check('activate made the target pane active', postAct.activeId === preAct.id, `active=${postAct.activeId}`);
+  check('activate framed the off-screen pane back into view', postAct.centered, `centered=${postAct.centered}`);
+
   report.errors = await app.evaluate(() => global.__errs || []);
   check('no console errors', report.errors.length === 0, report.errors.length ? report.errors.join(' | ') : '0');
 

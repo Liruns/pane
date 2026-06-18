@@ -257,7 +257,22 @@ class PaneWindow {
       // and the next Ctrl+Tab (a before-input-event) lands on no webContents.
       if (!view.webContents.isDestroyed()) view.webContents.focus();
       // (layout() re-pushes the canvas frames, incl. which pane is now live)
+      // Canvas mode: bring the newly-live pane into view. Every activation surface — command palette,
+      // tab strip, sidebar — funnels through here, so framing once fixes them all (a pane must never
+      // go live off-screen). Same fitPose the tile-click focus uses → one "go to pane" motion.
+      this._frameActivePane(view);
     }
+  }
+
+  /** Canvas mode: tween the camera so the active pane fills the viewport (the tile-click focus
+   *  motion). No-op outside canvas, with no view, or for a pane without a world yet (a fresh tab is
+   *  worlded after activation — the camera then stays put until the user pans/fits, as before). */
+  _frameActivePane(view) {
+    if (this._mode !== 'canvas' || !view) return;
+    const t = this.tabs.tabs.find((x) => x.view === view);
+    if (!t || !t.world) return;
+    const { width, regionH } = this._region();
+    this._animateCamera(Camera.fitPose([t.world], { width, height: regionH }));
   }
 
   /** Recompute which page views are mounted (visible) for the current layout mode. Both modes mount
@@ -454,9 +469,8 @@ class PaneWindow {
     if (this._mode !== 'canvas') return;
     const t = this.tabs.tabs.find((x) => x.id === id);
     if (!t || !t.world) return;
-    this.tabs.activate(id); // raise + go live
-    const { width, regionH } = this._region();
-    this._animateCamera(Camera.fitPose([t.world], { width, height: regionH }));
+    this.tabs.activate(id);      // raise + go live (frames the pane via _setActiveView if it changed)
+    this._frameActivePane(t.view); // re-frame explicitly so clicking the ALREADY-active tile recenters too
   }
 
   /** Tween the camera from its current pose to `target` over `ms` (easeInOutCubic), re-tiling +
