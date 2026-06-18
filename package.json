@@ -7,7 +7,8 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
-    "test": "node --test"
+    "test": "node --test",
+    "verify:canvas": "node scripts/canvas-verify.js"
   },
   "keywords": [
     "browser",
