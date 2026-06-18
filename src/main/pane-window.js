@@ -89,6 +89,7 @@ class PaneWindow {
     // tiled left of the page like the devtools dock. Off by default; restored on chrome load below.
     this.sidebar = new Sidebar({ win: this.win, refreshTabs: () => this.tabs.refresh() });
     this._verticalTabs = !!settings.get('verticalTabs');
+    this._railBeforeCanvas = false; // remembers the tabs-mode rail preference while canvas forces it off
 
     // The content-region layout strategies (CANVAS.md). layout() does the window-level math and hands
     // the post-rail region to _layout.place(); _layout points at one strategy, so swapping it swaps
@@ -341,11 +342,13 @@ class PaneWindow {
      page region insets/un-insets, and tell the chrome renderer (it hides the top strip + checks the
      menu toggle off the LAYOUT_STATE push). Page-region math stays in layout(); the rail owns only
      its own bounds + inset width. */
-  setVerticalTabs(on) {
+  setVerticalTabs(on, persist = true) {
     if (this.win.isDestroyed()) return;
     on = !!on;
     this._verticalTabs = on;
-    settings.set('verticalTabs', on);
+    // Canvas mode force-toggles the rail transiently (persist=false) so the saved tabs-mode
+    // preference survives — a user's own toggle persists, but canvas owning the region does not.
+    if (persist) settings.set('verticalTabs', on);
     // If the rail being removed currently holds keyboard focus, re-home it to the page — otherwise
     // focus is orphaned on the detached view and the next before-input-event shortcut (Ctrl+Tab …)
     // lands on no webContents (mirrors the tab-switch focus guard in _setActiveView).
@@ -374,7 +377,10 @@ class PaneWindow {
     this._mode = mode;
     settings.set('canvasMode', on);
     if (on) {
-      if (this.sidebar.enabled) this.setVerticalTabs(false); // the canvas owns the whole region (v1)
+      // Canvas owns the whole region (v1), so force the rail off — but remember the preference and
+      // DON'T persist the force-off, so exiting restores it and a quit mid-canvas can't clobber it.
+      this._railBeforeCanvas = this.sidebar.enabled;
+      if (this.sidebar.enabled) this.setVerticalTabs(false, false);
       this._ensureWorlds({ grid: true }); // spread existing panes on a grid on entry
       this.canvas.setEnabled(true);
       this._layout = this._canvasLayout;
@@ -388,6 +394,9 @@ class PaneWindow {
         if (!t.view.webContents.isDestroyed()) { try { t.view.webContents.setZoomFactor(1); } catch { /* gone */ } }
         t.view._snapshot = null;
       }
+      // Restore the rail to the pre-canvas preference (transient — the saved preference was never
+      // clobbered, so this re-attaches the view without a redundant persist).
+      if (this._railBeforeCanvas) this.setVerticalTabs(true, false);
     }
     this._syncMountedViews(); // mount the active view (canvas restacks the surface under it)
     this.dock.reconcile();    // re-tile the active pane's devtools for the new mode (edge-docked either way)
