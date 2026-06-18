@@ -37,6 +37,10 @@ class DevtoolsDock {
     this._splitter = null;        // the draggable gutter view (created on first dock)
     this._splitterShown = false;
     this._satellites = new Map(); // PageView → BaseWindow (detached devtools)
+    // wc → { x, y } target while an inspect waits for `devtools-opened`. Keyed by webContents so a
+    // re-entrant inspect retargets the pending pair instead of stacking a second listener pair
+    // (a WeakMap so a wc that somehow never opens/destroys can't pin its entry). See inspectElement().
+    this._pendingInspect = new WeakMap();
   }
 
   get _win() { return this._host.win; }
@@ -214,10 +218,22 @@ class DevtoolsDock {
     if (wc.isDestroyed()) return;
     const px = Math.round(x), py = Math.round(y);
     if (wc.isDevToolsOpened()) { wc.inspectElement(px, py); return; }
-    // Inspect once devtools attaches. If the tab is torn down before it ever opens, drop the pending
-    // listener so it can't dangle; each handler also clears the other so repeated inspects don't pile up.
-    const onOpened = () => { wc.removeListener('destroyed', onDestroyed); if (!wc.isDestroyed()) wc.inspectElement(px, py); };
-    const onDestroyed = () => wc.removeListener('devtools-opened', onOpened);
+    // Inspect once devtools attaches. If an inspect is already pending for this wc (devtools opening
+    // but the front-end not yet attached), just retarget it — registering a second pair would leak
+    // listeners toward Node's MaxListenersExceededWarning if `devtools-opened` somehow never fired and
+    // the tab never closed. The pair clears itself (and the pending entry) on whichever of open /
+    // teardown comes first; each handler also drops the other so nothing dangles.
+    const pending = this._pendingInspect.get(wc);
+    if (pending) { pending.x = px; pending.y = py; return; }
+    const target = { x: px, y: py };
+    this._pendingInspect.set(wc, target);
+    const done = () => {
+      this._pendingInspect.delete(wc);
+      wc.removeListener('devtools-opened', onOpened);
+      wc.removeListener('destroyed', onDestroyed);
+    };
+    const onOpened = () => { done(); if (!wc.isDestroyed()) wc.inspectElement(target.x, target.y); };
+    const onDestroyed = done;
     wc.once('devtools-opened', onOpened);
     wc.once('destroyed', onDestroyed);
     this.setDock(this._dockPref); // setMode + reconcile + ensureOpen, at the remembered side
